@@ -2,8 +2,20 @@
 
 [sub_resource type="BoxMesh" id="BoxMesh_7dm0k"]
 
+[sub_resource type="Environment" id="Environment_7dm0k"]
+background_mode = 1
+background_color = Color(0.019607844, 0.02745098, 0.039215688, 1)
+
 [node name="Main" type="Node3D" unique_id=943567623]
 
 [node name="MeshInstance3D" type="MeshInstance3D" parent="." unique_id=1449420838]
 transform = Transform3D(20, 0, 0, 0, 0.2, 0, 0, 0, 20, 0, 0, 0)
 mesh = SubResource("BoxMesh_7dm0k")
+
+[node name="SunLight" type="DirectionalLight3D" parent="." unique_id=542550407]
+transform = Transform3D(0.81915206, -0.4055798, 0.40557975, 0, 0.70710677, 0.7071068, -0.57357645, -0.579228, 0.5792279, 0, 0.039069176, -0.22997284)
+light_energy = 1.5
+shadow_enabled = true
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="." unique_id=89443646]
+environment = SubResource("Environment_7dm0k")

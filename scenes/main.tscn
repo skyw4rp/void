@@ -1,8 +1,36 @@
-[gd_scene format=3 uid="uid://by2p5hp8kwv2f"]
+[gd_scene load_steps=10 format=3 uid="uid://by2p5hp8kwv2f"]
 
 [ext_resource type="Script" path="res://scripts/player.gd" id="1_player"]
 
+[sub_resource type="Environment" id="Environment_void"]
+background_mode = 1
+background_color = Color(0.015, 0.02, 0.045, 1)
+ambient_light_source = 2
+ambient_light_color = Color(0.06, 0.07, 0.12, 1)
+ambient_light_energy = 0.25
+fog_enabled = true
+fog_mode = 0
+fog_light_color = Color(0.01, 0.015, 0.04, 1)
+fog_density = 0.018
+fog_sky_affect = 0.0
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_floor"]
+albedo_color = Color(0.18, 0.17, 0.2, 1)
+roughness = 0.92
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_border"]
+albedo_color = Color(0.08, 0.075, 0.09, 1)
+roughness = 0.95
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_testcube"]
+albedo_color = Color(0.45, 0.42, 0.38, 1)
+roughness = 0.85
+
 [sub_resource type="BoxMesh" id="BoxMesh_floor"]
+
+[sub_resource type="BoxMesh" id="BoxMesh_border"]
+
+[sub_resource type="BoxMesh" id="BoxMesh_testcube"]
 
 [sub_resource type="BoxShape3D" id="BoxShape3D_floor"]
 size = Vector3(1, 1, 1)
@@ -13,14 +41,50 @@ height = 1.8
 
 [node name="Main" type="Node3D"]
 
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = SubResource("Environment_void")
+
+[node name="SunLight" type="DirectionalLight3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 0.5, 0.866025, 0, -0.866025, 0.5, 0, 12, 0)
+light_energy = 3.0
+shadow_enabled = true
+
 [node name="Floor" type="MeshInstance3D" parent="."]
 transform = Transform3D(20, 0, 0, 0, 0.2, 0, 0, 0, 20, 0, 0, 0)
+material_override = SubResource("StandardMaterial3D_floor")
 mesh = SubResource("BoxMesh_floor")
 
 [node name="StaticBody3D" type="StaticBody3D" parent="Floor"]
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="Floor/StaticBody3D"]
 shape = SubResource("BoxShape3D_floor")
+
+[node name="PlatformBorder" type="Node3D" parent="."]
+
+[node name="BorderNorth" type="MeshInstance3D" parent="PlatformBorder"]
+transform = Transform3D(20, 0, 0, 0, 0.25, 0, 0, 0, 0.35, 0, 0.08, -10.175)
+material_override = SubResource("StandardMaterial3D_border")
+mesh = SubResource("BoxMesh_border")
+
+[node name="BorderSouth" type="MeshInstance3D" parent="PlatformBorder"]
+transform = Transform3D(20, 0, 0, 0, 0.25, 0, 0, 0, 0.35, 0, 0.08, 10.175)
+material_override = SubResource("StandardMaterial3D_border")
+mesh = SubResource("BoxMesh_border")
+
+[node name="BorderWest" type="MeshInstance3D" parent="PlatformBorder"]
+transform = Transform3D(0.35, 0, 0, 0, 0.25, 0, 0, 0, 20, -10.175, 0.08, 0)
+material_override = SubResource("StandardMaterial3D_border")
+mesh = SubResource("BoxMesh_border")
+
+[node name="BorderEast" type="MeshInstance3D" parent="PlatformBorder"]
+transform = Transform3D(0.35, 0, 0, 0, 0.25, 0, 0, 0, 20, 10.175, 0.08, 0)
+material_override = SubResource("StandardMaterial3D_border")
+mesh = SubResource("BoxMesh_border")
+
+[node name="TestCube" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 2, 0, 0, 0, 1, 0, 1, -5)
+material_override = SubResource("StandardMaterial3D_testcube")
+mesh = SubResource("BoxMesh_testcube")
 
 [node name="Player" type="CharacterBody3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.1, 0)
