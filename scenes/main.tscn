@@ -1,6 +1,7 @@
-[gd_scene load_steps=10 format=3 uid="uid://by2p5hp8kwv2f"]
+[gd_scene load_steps=17 format=3 uid="uid://by2p5hp8kwv2f"]
 
 [ext_resource type="Script" path="res://scripts/player.gd" id="1_player"]
+[ext_resource type="Script" path="res://scripts/push_weapon.gd" id="2_push_weapon"]
 
 [sub_resource type="Environment" id="Environment_void"]
 background_mode = 1
@@ -25,6 +26,31 @@ roughness = 0.95
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_testcube"]
 albedo_color = Color(0.45, 0.42, 0.38, 1)
 roughness = 0.85
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_weapon"]
+albedo_color = Color(0.55, 0.52, 0.48, 1)
+roughness = 0.8
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_pushbox1"]
+albedo_color = Color(0.62, 0.22, 0.18, 1)
+roughness = 0.75
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_pushbox2"]
+albedo_color = Color(0.2, 0.45, 0.55, 1)
+roughness = 0.75
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_pushbox3"]
+albedo_color = Color(0.35, 0.55, 0.22, 1)
+roughness = 0.75
+
+[sub_resource type="BoxMesh" id="BoxMesh_weapon"]
+size = Vector3(0.12, 0.08, 0.2)
+
+[sub_resource type="BoxMesh" id="BoxMesh_pushbox"]
+size = Vector3(1, 1, 1)
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_pushbox"]
+size = Vector3(1, 1, 1)
 
 [sub_resource type="BoxMesh" id="BoxMesh_floor"]
 
@@ -86,6 +112,39 @@ transform = Transform3D(1, 0, 0, 0, 2, 0, 0, 0, 1, 0, 1, -5)
 material_override = SubResource("StandardMaterial3D_testcube")
 mesh = SubResource("BoxMesh_testcube")
 
+[node name="PushBox1" type="RigidBody3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.6, -4)
+mass = 2.0
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="PushBox1"]
+material_override = SubResource("StandardMaterial3D_pushbox1")
+mesh = SubResource("BoxMesh_pushbox")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="PushBox1"]
+shape = SubResource("BoxShape3D_pushbox")
+
+[node name="PushBox2" type="RigidBody3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2, 0.6, -5.5)
+mass = 2.0
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="PushBox2"]
+material_override = SubResource("StandardMaterial3D_pushbox2")
+mesh = SubResource("BoxMesh_pushbox")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="PushBox2"]
+shape = SubResource("BoxShape3D_pushbox")
+
+[node name="PushBox3" type="RigidBody3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2, 0.6, -5.5)
+mass = 2.0
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="PushBox3"]
+material_override = SubResource("StandardMaterial3D_pushbox3")
+mesh = SubResource("BoxMesh_pushbox")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="PushBox3"]
+shape = SubResource("BoxShape3D_pushbox")
+
 [node name="Player" type="CharacterBody3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.1, 0)
 script = ExtResource("1_player")
@@ -93,6 +152,13 @@ script = ExtResource("1_player")
 [node name="Camera3D" type="Camera3D" parent="Player"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.6, 0)
 fov = 90.0
+
+[node name="PushWeapon" type="MeshInstance3D" parent="Player/Camera3D"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.42, -0.32, -0.55)
+material_override = SubResource("StandardMaterial3D_weapon")
+mesh = SubResource("BoxMesh_weapon")
+script = ExtResource("2_push_weapon")
+fire_cooldown = 0.25
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="Player"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.9, 0)
