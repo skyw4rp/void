@@ -13,7 +13,8 @@ Main (Node3D)
 ├── PlatformBorder       — thin rim meshes on four sides
 ├── TestCube             — shadow / lighting reference prop
 ├── PushBox1 / PushBox2 / PushBox3 — pushable `RigidBody3D` cubes
-└── Player               — `scripts/player.gd`
+├── Enemy1 / Enemy2 / Enemy3       — `scenes/enemies/push_enemy.tscn`
+└── Player               — `scripts/player.gd` (group: `player`)
     ├── Camera3D
     │   └── PushWeapon   — `scripts/push_weapon.gd` (spawns push projectile)
     └── CollisionShape3D
@@ -79,6 +80,29 @@ Projectile scene: `scenes/weapons/push_projectile.tscn` (`Area3D` + sphere mesh)
 The projectile moves along the camera look direction. On **RigidBody3D** contact it applies an impulse in its travel direction, prints debug info, and is destroyed. Any other body destroys it without pushing. No damage.
 
 **PushBox1–3** are colored 1 m cubes on the platform ahead of spawn for testing pushes.
+
+## Push enemies
+
+Scene: `scenes/enemies/push_enemy.tscn` (`RigidBody3D` + magenta capsule). Script: `scripts/push_enemy.gd`.
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| `move_force` | `8` | Central force toward the player |
+| `max_speed` | `4` | Horizontal speed cap |
+| `void_y` | `-20` | Y threshold for void removal |
+| `respawn_on_void` | `false` | Reserved for future respawn waves |
+
+Enemies **chase the player** on the platform (horizontal force via group `player`). They are full `RigidBody3D` bodies, so **push projectiles** knock them like the crates — no damage yet. Shoot them toward the rim and into the void; when **Y < -20** the enemy prints `Enemy fell into the void` and is removed with `queue_free()`.
+
+Main scene spawns **Enemy1–3** at `(0, 1, -8)`, `(-4, 1, -7)`, and `(4, 1, -7)`.
+
+## Void death and respawn
+
+On start, the player stores their initial position as the respawn point. If **Y** drops below **-20** (fallen into the void), they are teleported back to that spawn, velocity is cleared, and the Output prints:
+
+`Player fell into the void. Respawning.`
+
+Walk off the platform edge to test. A placeholder comment in `scripts/player.gd` marks where camera shake or a screen flash can be added later.
 
 ## Controls
 

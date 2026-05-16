@@ -12,13 +12,19 @@ const MOUSE_SENSITIVITY: float = 0.002
 const LOOK_PITCH_MIN: float = -1.4
 const LOOK_PITCH_MAX: float = 1.4
 
+## Y threshold below the platform — player respawns when they fall past this height.
+const VOID_DEATH_Y: float = -20.0
+
 @onready var camera: Camera3D = $Camera3D
 
 ## Uses the project default gravity unless overridden in Project Settings.
 var _gravity: float = ProjectSettings.get_setting("physics/3d/default_gravity")
+var _spawn_position: Vector3 = Vector3.ZERO
 
 
 func _ready() -> void:
+	add_to_group("player")
+	_spawn_position = global_position
 	# Start with the mouse captured for FPS controls.
 	Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
 
@@ -65,3 +71,13 @@ func _physics_process(delta: float) -> void:
 		velocity.z = direction.z * speed
 
 	move_and_slide()
+
+	if global_position.y < VOID_DEATH_Y:
+		_respawn_from_void()
+
+
+func _respawn_from_void() -> void:
+	print("Player fell into the void. Respawning.")
+	global_position = _spawn_position
+	velocity = Vector3.ZERO
+	# TODO: Add camera shake or brief screen flash VFX here.

@@ -2,6 +2,7 @@
 
 [ext_resource type="Script" path="res://scripts/player.gd" id="1_player"]
 [ext_resource type="Script" path="res://scripts/push_weapon.gd" id="2_push_weapon"]
+[ext_resource type="PackedScene" uid="uid://bpushenemyscene01" path="res://scenes/enemies/push_enemy.tscn" id="3_push_enemy"]
 
 [sub_resource type="Environment" id="Environment_void"]
 background_mode = 1
@@ -144,6 +145,15 @@ mesh = SubResource("BoxMesh_pushbox")
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="PushBox3"]
 shape = SubResource("BoxShape3D_pushbox")
+
+[node name="Enemy1" parent="." instance=ExtResource("3_push_enemy")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, -8)
+
+[node name="Enemy2" parent="." instance=ExtResource("3_push_enemy")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -4, 1, -7)
+
+[node name="Enemy3" parent="." instance=ExtResource("3_push_enemy")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4, 1, -7)
 
 [node name="Player" type="CharacterBody3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.1, 0)
