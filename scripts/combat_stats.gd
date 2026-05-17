@@ -4,6 +4,7 @@ extends Node
 
 signal stats_changed(shield: int, health: int)
 signal died(attacker: Node)
+signal shield_broken(source: String)
 
 const HEAVY_OVERKILL_THRESHOLD: int = 25
 const HEAVY_DAMAGE_THRESHOLD: int = 40
@@ -88,6 +89,7 @@ func apply_damage(amount: int, attacker: Node = null) -> void:
 	last_damage_amount = amount
 	overkill_amount = 0
 
+	var shield_before: int = shield
 	var remaining: int = amount
 	if shield > 0:
 		var absorbed: int = mini(shield, remaining)
@@ -98,6 +100,15 @@ func apply_damage(amount: int, attacker: Node = null) -> void:
 		if health < 0:
 			overkill_amount = absi(health)
 			health = 0
+
+	if shield_before > 0 and shield <= 0:
+		match last_damage_source:
+			"railgun":
+				print("Shield broken by Railgun")
+			"bazooka_direct":
+				print("Shield broken by Bazooka direct hit")
+		if last_damage_source == "railgun" or last_damage_source == "bazooka_direct":
+			shield_broken.emit(last_damage_source)
 
 	_log_stats()
 	stats_changed.emit(shield, health)

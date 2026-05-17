@@ -1,0 +1,28 @@
+[gd_scene load_steps=4 format=3 uid="uid://cdebrischunk01"]
+
+[ext_resource type="Script" path="res://scripts/props/debris_chunk.gd" id="1_script"]
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_debris"]
+albedo_color = Color(0.16, 0.15, 0.17, 1)
+roughness = 0.9
+
+[sub_resource type="BoxMesh" id="BoxMesh_debris"]
+size = Vector3(1, 1, 1)
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_debris"]
+size = Vector3(1, 1, 1)
+
+[node name="DebrisChunk" type="RigidBody3D"]
+collision_layer = 1
+collision_mask = 1
+mass = 3.5
+linear_damp = 0.6
+angular_damp = 0.75
+script = ExtResource("1_script")
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="."]
+material_override = SubResource("StandardMaterial3D_debris")
+mesh = SubResource("BoxMesh_debris")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="."]
+shape = SubResource("BoxShape3D_debris")

@@ -14,7 +14,7 @@ signal death_message_hidden()
 signal void_overlay_changed(active: bool, player_fell: bool)
 
 const WIN_SCORE: int = 5
-const VOID_Y: float = -20.0
+const VOID_Y: float = GameBalance.VOID_DEATH_Y
 const COUNTDOWN_STEP_SEC: float = 1.0
 const FIGHT_TEXT_SEC: float = 0.7
 const VOID_FALL_DELAY_SEC: float = 2.0
@@ -25,9 +25,7 @@ var enemy_score: int = 0
 var state: RoundState = RoundState.COUNTDOWN
 
 var _handling_round_end: bool = false
-
-@onready var _player_spawn: Marker3D = $SpawnPoints/PlayerSpawn
-@onready var _enemy_spawn: Marker3D = $SpawnPoints/EnemySpawn
+var _arena_generator: ArenaGenerator
 
 
 func _ready() -> void:
@@ -36,6 +34,8 @@ func _ready() -> void:
 
 
 func get_void_y() -> float:
+	if _arena_generator:
+		return _arena_generator.get_void_y()
 	return VOID_Y
 
 
@@ -47,12 +47,20 @@ func is_round_active() -> bool:
 	return is_fighting()
 
 
+func get_arena_generator() -> ArenaGenerator:
+	return _arena_generator
+
+
 func get_player_spawn() -> Vector3:
-	return _player_spawn.global_position
+	if _arena_generator:
+		return _arena_generator.get_player_spawn_position()
+	return Vector3(0.0, 1.1, 10.0)
 
 
 func get_enemy_spawn() -> Vector3:
-	return _enemy_spawn.global_position
+	if _arena_generator:
+		return _arena_generator.get_enemy_spawn_position()
+	return Vector3(0.0, 1.0, -10.0)
 
 
 func report_player_void_fall() -> void:
@@ -211,10 +219,13 @@ func _run_countdown() -> void:
 
 	print("Round countdown started")
 	state = RoundState.COUNTDOWN
+	await _generate_round_arena()
 	_clear_projectiles()
 	_clear_corpses()
 	_clear_void_effects()
 	_clear_gib_chunks()
+	_clear_round_debris()
+	_spawn_round_debris()
 	death_message_hidden.emit()
 	void_overlay_changed.emit(false, false)
 	_respawn_fighters()
@@ -229,6 +240,14 @@ func _run_countdown() -> void:
 
 	countdown_hidden.emit()
 	state = RoundState.FIGHTING
+
+
+func _generate_round_arena() -> void:
+	_arena_generator = get_tree().get_first_node_in_group("arena_generator") as ArenaGenerator
+	if _arena_generator == null:
+		push_warning("GameManager: ArenaGenerator not found.")
+		return
+	await _arena_generator.generate_round_arena_async()
 
 
 func _end_match(player_won: bool) -> void:
@@ -274,22 +293,51 @@ func _clear_gib_chunks() -> void:
 			(node as Node).queue_free()
 
 
+func _clear_round_debris() -> void:
+	var spawner := _get_debris_spawner()
+	if spawner and spawner.has_method("clear_debris"):
+		spawner.call("clear_debris")
+
+
+func _spawn_round_debris() -> void:
+	var spawner := _get_debris_spawner()
+	if spawner == null or not spawner.has_method("spawn_round_debris_for_generator"):
+		return
+	if _arena_generator:
+		spawner.call("spawn_round_debris_for_generator", _arena_generator)
+
+
+func _get_debris_spawner() -> Node:
+	if _arena_generator:
+		var child := _arena_generator.get_node_or_null("DebrisSpawner")
+		if child:
+			return child
+	return get_tree().get_first_node_in_group("debris_spawner")
+
+
 func _respawn_fighters() -> void:
+	if _arena_generator == null:
+		return
+
 	var player := _get_player() as CharacterBody3D
 	if player:
-		player.global_transform = _player_spawn.global_transform
+		player.global_transform = _arena_generator.get_player_spawn_transform()
 		player.velocity = Vector3.ZERO
 		if player.has_method("arena_respawn"):
-			player.arena_respawn(_player_spawn.global_position)
+			player.arena_respawn(_arena_generator.get_player_spawn_position())
 		_reset_combat_stats(player)
 
 	var opponent := _get_opponent() as RigidBody3D
 	if opponent:
-		opponent.global_transform = _enemy_spawn.global_transform
+		opponent.global_transform = _arena_generator.get_enemy_spawn_transform()
 		opponent.linear_velocity = Vector3.ZERO
 		opponent.angular_velocity = Vector3.ZERO
 		if opponent.has_method("arena_respawn"):
-			opponent.arena_respawn(_enemy_spawn.global_position)
+			opponent.arena_respawn(_arena_generator.get_enemy_spawn_position())
+		if opponent.has_method("apply_arena_bounds_from_dict"):
+			opponent.call(
+				"apply_arena_bounds_from_dict", _arena_generator.get_current_arena_bounds()
+			)
 		_reset_combat_stats(opponent)
 
 

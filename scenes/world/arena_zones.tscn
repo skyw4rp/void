@@ -1,0 +1,25 @@
+[gd_scene load_steps=8 format=3 uid="uid://carenazonesroot01"]
+
+[ext_resource type="Script" path="res://scripts/environment/arena_selector.gd" id="1_selector"]
+[ext_resource type="Script" path="res://scripts/props/debris_spawner.gd" id="2_debris"]
+[ext_resource type="PackedScene" uid="uid://carenapitbridge01" path="res://scenes/arenas/pit_bridge_arena.tscn" id="3_pit"]
+[ext_resource type="PackedScene" uid="uid://carenabrokenplat01" path="res://scenes/arenas/broken_platform_arena.tscn" id="4_broken"]
+[ext_resource type="PackedScene" uid="uid://carenapillarring01" path="res://scenes/arenas/pillar_ring_arena.tscn" id="5_pillar"]
+[ext_resource type="PackedScene" uid="uid://carenatwinlanes01" path="res://scenes/arenas/twin_lanes_arena.tscn" id="6_twin"]
+[ext_resource type="PackedScene" uid="uid://carenacentralruins01" path="res://scenes/arenas/central_ruins_arena.tscn" id="7_ruins"]
+
+[node name="ArenaZones" type="Node3D"]
+script = ExtResource("1_selector")
+
+[node name="DebrisSpawner" type="Node3D" parent="."]
+script = ExtResource("2_debris")
+
+[node name="PitBridgeArena" parent="." instance=ExtResource("3_pit")]
+
+[node name="BrokenPlatformArena" parent="." instance=ExtResource("4_broken")]
+
+[node name="PillarRingArena" parent="." instance=ExtResource("5_pillar")]
+
+[node name="TwinLanesArena" parent="." instance=ExtResource("6_twin")]
+
+[node name="CentralRuinsArena" parent="." instance=ExtResource("7_ruins")]

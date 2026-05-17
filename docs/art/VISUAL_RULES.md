@@ -64,3 +64,12 @@ Quick reference for artists and designers. When in doubt, choose **less light** 
 - Weapon feedback clear (projectiles, knockback)
 - HUD health/shield legible without breaking mood
 - Pit edges must be **fair** — player understands “I can fall here”
+
+---
+
+## Arena enclosure (prototype)
+
+- **Suspended fortress** — fights occur inside a **broken outer ring**, not on isolated platforms
+- **40–70% perimeter coverage** — openings required; toxic void visible beyond gaps
+- **Heights:** low cover 0.8–1.5 m · outer walls 2.5–4 m · decor silhouettes 4–6 m (no collision)
+- **Materials:** dark concrete, oxidized metal, black stone — damaged surfaces only

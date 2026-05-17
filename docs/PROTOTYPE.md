@@ -1,6 +1,6 @@
 # Neon Catacombs — 1v1 Arena Prototype
 
-Godot 4.6 first-person **knock-off duel** on a deadly **suspended bridge** over a **perceptual horror void**. Win by **ring-out** or by **breaking shield and killing** your opponent.
+Godot 4.6 first-person **knock-off duel** across **large suspended arenas** over an **infinite toxic void**. Each round picks a spacious layout with protected perimeters, intentional fall openings, and central cover. Win by **ring-out** or by **breaking shield and killing** your opponent.
 
 **Art direction:** [art/ART_DIRECTION.md](art/ART_DIRECTION.md) (canonical) · [ART_DIRECTION_VOID.md](ART_DIRECTION_VOID.md) (prototype implementation index) · [docs index](README.md)
 
@@ -15,37 +15,85 @@ Godot 4.6 first-person **knock-off duel** on a deadly **suspended bridge** over 
 | Damage order | Damage hits **shield first**; overflow reduces **health** |
 | Round start | **3 → 2 → 1 → FIGHT!** countdown (1s per number, 0.7s for FIGHT!) |
 | During countdown | Player and AI **frozen** — no move, no shoot |
-| After point | Respawn both, reset shield/health, clear projectiles → new countdown |
-| Void score | Ring-out below **Y = -20** — **2 s** fall, void burst effect, then +1 |
+| After point | Pick new arena → clear FX/debris → spawn cover → respawn at arena markers → countdown |
+| Arena pick | **Random** each round (won’t repeat the same arena name back-to-back) |
+| Void score | Ring-out below **Y = -20** — **VOID_GORE** cinematic (~**3.2 s**) or legacy fall + burst, then +1 |
 | Kill score | You kill AI → player +1; AI kills you → enemy +1 |
 
-Spawns: **Player** south end `(0, 1.1, 10)`, **Enemy** north end `(0, 1, -10)` — face each other at round start.
+Spawns are **generated and validated** each round (not hand-placed in the scene). Debug: `Round arena selected: …`, `Spawn validation passed` / `Spawn invalid, regenerating arena`.
 
-## Bridge arena layout
+## Toxic void world
 
-Classic **pit-stage** bridge over a deep void (`scenes/main.tscn`):
+Shared backdrop (`VoidAtmosphere`, `VoidDistantArchitecture`) with **one procedurally built arena** per round from `ArenaGenerator` (`scenes/arena/arena_generator.tscn`).
 
-| Feature | Detail |
-|---------|--------|
-| Walkable deck | **8 × 28** units (long narrow bridge) |
-| Visuals | Dark stone/metal deck, raised trims, low side rails (no walls) |
-| Props | End pillars, broken columns, surface cracks — decorative only |
-| Pit | **No visible floor** — `VoidAtmosphere` fog layers, drift particles, abyss observers |
-| Lighting | Cold directional sun, sparse steel rim lights (Quake-like industrial) |
-| Ring-out | Fall below **Y = -20** on any side or end |
+| Environment | Detail |
+|-------------|--------|
+| Sky / fog | Light haze on deck; **dense gas starts ~Y -18** (below arena); collapse on fall |
+| Void death | **Y < -32** (`GameBalance.VOID_DEATH_Y`); warning band from **-18** |
+| `VoidAtmosphere` | Layered gas (upper / deep / corruption haze), ash particles, depth-driven density |
+| `VoidGasController` | World fog + vignette + desaturation + DOF blur by fall depth |
+| `VoidDistantArchitecture` | Distant ruins, towers, chains in fog |
+| Ring-out | **Y < -20** — intentional gaps between platforms, not accidental wide edges |
 
-Gameplay stays readable: rails warn danger but do **not** block falls.
+## ArenaGenerator (`scripts/arena/arena_generator.gd`)
 
-### AI bridge bounds (rectangular)
+Each countdown:
 
-| Export | Value | Meaning |
-|--------|-------|---------|
-| `safe_half_x` | 3.2 | Steer inward from left/right |
-| `danger_half_x` | 3.8 | Strong recovery near side edge |
-| `safe_half_z` | 12.0 | Steer inward from bridge ends |
-| `danger_half_z` | 13.5 | Strong recovery near bridge ends |
+1. **Clear** previous floor (`ActiveArena` children), debris, projectiles, corpses, gibs.
+2. **Pick** a template from `ArenaTemplates` (won’t repeat the same name back-to-back).
+3. **Build** floors + walls + **outer perimeter** (~60–80% protected) + **fall zone markers** (cracked edge, void glow).
+4. **Validate spawns** — raycast down from player/enemy template XZ; require floor hit on layer **1**; place fighters at `floor_y + 1.0`, facing each other.
+5. If invalid → `Spawn invalid, regenerating arena` (up to 6 attempts, then Toxic Bridge fallback).
+6. Spawn **5–9** destructible cover pieces on **raycast-validated** floor points.
+7. Respawn fighters at validated transforms; pass `get_current_arena_bounds()` to AI.
 
-AI pushes you toward the **nearest** open edge (side or end), not only “away from center” on a circle.
+### Arena templates (`scripts/arena/arena_templates.gd`)
+
+**24×24 – 32×32** main decks, **6+ unit** bridges/corridors — intentional holes only (no random micro-gaps).
+
+| ID | Name | Layout |
+|----|------|--------|
+| `BROKEN_REACTOR` | Broken Reactor | C-walkway around **12×12** central pit |
+| `TOXIC_BRIDGE` | Toxic Bridge | **14×14** twins + **6×10** bridge |
+| `SPLIT_PLATFORMS` | Split Platforms | **13×20** decks + **6×4** catwalks |
+| `RUINED_COURTYARD` | Ruined Courtyard | Ring around **14×14** pit + corner pads |
+| `HANGING_CORRIDORS` | Hanging Corridors | **6×28** parallel lanes + end bridges |
+
+Each template: `spawn_safe_half`, `fall_zones[]`, `perimeter.ringout_open_sides`, `void_y` (**-32**).
+
+### Outer perimeter (`scripts/arena/arena_perimeter_builder.gd`)
+
+- Procedural **partial shell** around danger bounds + margin
+- Piece types: full ruined wall, half wall, collapsed, cracked pillar, hanging panel
+- **Decor-only** corner towers and distant breakwall silhouettes (no collision)
+- Destructible panels: `arena_perimeter_panel.gd` — `damage_cover()`, fragments on break
+- Groups: `arena_wall`, `arena_perimeter` (AI cover), `arena_perimeter_decor` (visual only)
+
+**Adding a template:** implement a builder in `arena_templates.gd`, add to `get_playable_ids()`, deck top at **local y = 0** (`slab` helper: center y = `-thickness/2`).
+
+### Debug markers
+
+`ArenaGenerator.debug_show_markers` (default **true**): green sphere = player spawn, red = enemy, blue = danger bounds corners.
+
+### AI integration
+
+`ArenaOpponent.apply_arena_bounds_from_dict()` ← bounds each respawn. AI uses **cover** (`arena_wall` LOS breaks), **hole raycasts** (`has_floor_at` / `is_floor_ahead`), railgun at range, shotgun when blocked or close.
+
+## Destructible cover (`DebrisSpawner`)
+
+Each countdown (including match start):
+
+1. Clear **`round_debris`** and **`round_debris_fragment`** from the previous round.
+2. Spawn **5–9** large `debris_chunk.tscn` cover pieces in the **active arena’s** debris zone (per-arena local X/Z rect), spread apart.
+3. Cover types (random): **BLOCK**, **WALL_SLAB** (tall LOS blocker), **BROKEN_PILLAR**, **FALLEN_BEAM** — each with its own scale, mass, material, and rotation.
+4. Spawn avoids player/enemy spawns (~**3.8** u) and limits pieces in the narrow center lane so at least one route around stays open.
+5. **Health** per type: Block **60**, Wall slab **100**, Pillar **80**, Beam **70**. Railgun, shotgun, and bazooka apply damage via `damage_cover()`; bazooka explosions deal extra damage.
+6. At **0 HP**: piece breaks into **4–8** small fragments (`round_debris_fragment`, **4–6 s** lifetime) then the cover is removed.
+7. Cover blocks physical shots and line of sight; weapons still apply knockback. Pieces can be pushed and knocked into the void.
+
+Debug: `Cover health: …`, `Cover destroyed: …`, `Spawned N destructible cover pieces…`
+
+`scenes/props/debris_chunk.tscn` · `scenes/props/debris_fragment.tscn` · `scripts/props/debris_spawner.gd` · layer **1**, not used for scoring.
 
 ## Round countdown
 
@@ -61,10 +109,9 @@ AI pushes you toward the **nearest** open edge (side or end), not only “away f
 ```
 Main
 ├── WorldEnvironment / SunLight / accent lights
-├── PitVoid              — deep darkness below bridge
-├── BridgeArena          — deck, trims, rails, cracks, pillars
-├── GameManager + spawns
-├── PushBox1             — center cover crate
+├── VoidAtmosphere / VoidDistantArchitecture
+├── ArenaGenerator       — procedural floor + spawn validation + DebrisSpawner
+├── GameManager
 ├── ArenaOpponent / Player
 └── UI
 ```
@@ -80,7 +127,7 @@ Main
 Debug: `Enemy state: ATTACKING` / `RECOVERING`, `Enemy avoiding edge`
 
 ### Arena awareness
-- Rectangular bridge bounds (see table above)
+- Rectangular bounds from `ArenaGenerator.get_current_arena_bounds()`
 - Counter-force if velocity drifts toward an open edge
 - No forward chase while near sides/ends (anti-suicide)
 
@@ -91,9 +138,9 @@ Debug: `Enemy state: ATTACKING` / `RECOVERING`, `Enemy avoiding edge`
 - Never stands still (idle strafe if overlapping)
 
 ### Weapons (same stats as player)
-- **Shotgun** — close range
-- **Bazooka** — player near edge, ring-out angle, or medium range (not constant spam; ~38–55% roll)
-- **Railgun** — long range, precision beam
+- **Shotgun** — close range spread pressure (large readable pellets)
+- **Bazooka** — medium / ring-out (~26–40% pick); slower cadence; direct hit is lethal but not spammed
+- **Railgun** — long range; one hit breaks shield, second hit kills; strong edge knockback
 - Random weapon swap every **4–6 s** between tactical picks
 
 ### Ring-out tactics
@@ -154,7 +201,7 @@ Gib chunks and corpses are cleared at round start with projectiles/void effects.
 
 ### Void death spectacle
 
-When a fighter crosses **void_y** (`-20`):
+When a fighter crosses **void_y** (**-32**):
 
 1. Enter **`void_dying`** — controls/AI off, body keeps falling.
 2. Player: camera falls with body; red void overlay + HUD (`PLAYER LOST TO THE VOID` / `ENEMY LOST TO THE VOID`).
@@ -197,12 +244,12 @@ Gore is stylized sci-fi corruption (dark red/black chunks), not anatomical. Chun
 
 | Key | Weapon | Role |
 |-----|--------|------|
-| **1** | **Railgun** — instant beam, precision knockback | Single-target push at range |
-| **2** | **Shotgun** — pellet spread | Close-range blast |
-| **3** | **Bazooka** — slow rocket + explosion | Area / ring-out threat |
+| **1** | **Railgun** — instant beam, precision execution | One hit breaks shield; second hit kills |
+| **2** | **Shotgun** — 7 large pellets, spread | Close-range pressure (~70 dmg if all connect) |
+| **3** | **Bazooka** — slow rocket + explosion | Direct shield break; splash for ring-out |
 | **Left click** | Fire | |
 
-**Railgun** uses an instant ray (no spread, **120** unit range, **0.65 s** cooldown). A blue/purple/white **beam tracer** (~0.08–0.15 s) and a small impact flash show the hit. Debug: `Railgun` on fire.
+**Railgun** uses an instant ray (no spread, **120** unit range, **0.95 s** cooldown). **100** damage: first clean hit strips a full **100** shield; a second hit deals **100** health damage and kills. Strong mostly-horizontal knockback (**68** push) threatens ring-outs near edges. Shield break prints `Shield broken by Railgun` and triggers a cyan HUD/crosshair flash. A blue/purple/white **beam tracer** (~0.08–0.15 s) and a small impact flash show the hit.
 
 Shotgun and bazooka still use projectiles. All weapons apply **knockback and damage** (no self-damage). Crates still take push only.
 
@@ -210,10 +257,10 @@ Shotgun and bazooka still use projectiles. All weapons apply **knockback and dam
 
 | Weapon | Damage | Knockback `push_force` |
 |--------|--------|------------------------|
-| Railgun | **22** per hit | **34** (strong horizontal, low vertical) |
-| Shotgun | **8** per pellet | **24** per pellet |
-| Bazooka direct | **35** | **42** |
-| Bazooka explosion | up to **45** (radius falloff) | **82** explosion force |
+| Railgun | **100** per hit (shield first, then health) | **68** (strong horizontal, low vertical) |
+| Shotgun | **10** × **7** pellets (max **70** per full burst) | **30** per pellet (scary close range) |
+| Bazooka direct | **100** (shield break / 2-hit kill like railgun) | **58** (strong, controlled) |
+| Bazooka explosion | up to **60** (radius falloff) | **82** explosion force (ring-out focus) |
 
 ## Knockback (player + AI)
 
@@ -251,9 +298,9 @@ Explosions use **mostly horizontal** push (ring-outs off the platform, not sky l
 | Location | What to tune |
 |----------|----------------|
 | `scripts/weapons/weapon_defs.gd` | Weapon `push_force` / `explosion_force` **and** knockback multipliers |
-| → Railgun `push_force` | Default **34** |
-| → Shotgun pellet `push_force` | Default **24** × 7 |
-| → Bazooka `push_force` / `explosion_force` | Defaults **42** / **82** |
+| → Railgun `push_force` | Default **68** (weaker than bazooka blast, stronger than shotgun pellets) |
+| → Shotgun pellet `push_force` / `mesh_scale` / `hit_radius` | **30** × 7 / **0.12** visual / **0.115** collision |
+| → Bazooka direct `push_force` / `explosion_force` | **58** / **82**; cooldown **1.4 s** |
 | `scripts/player.gd` (Inspector) | Optional overrides for player multipliers / max speed |
 | `scripts/combat_stats.gd` | `max_health`, `max_shield` per fighter |
 
@@ -266,6 +313,34 @@ Projectiles store a **shooter** and ignore self-hits. Layer 2 projectiles, mask 
 - Top: `Player: 0 | Enemy: 0`
 - Bottom: `Weapon: …`
 - Center (on win): `You Win!` or `You Lose!`
+
+### Crosshair (`scenes/ui/crosshair.tscn`, `scripts/ui/crosshair.gd`)
+
+Center-screen reticle on the UI layer — drawn with `_draw()` (no textures).
+
+| State | Behavior |
+|-------|----------|
+| **Idle** | Compact cyan/white dot + four short lines (~88% alpha) |
+| **Moving / jumping** | Lines spread slightly (weapon-dependent) |
+| **Shooting** | Quick pulse (gap widens briefly) |
+| **Hit enemy (shield)** | Cyan flash |
+| **Hit enemy (health)** | Red/white flash |
+| **Kill** | Stronger flash + small center **X** marker |
+| **Cover hit** | Subtle cyan flash |
+
+**Weapon styles:**
+
+| Weapon | Crosshair |
+|--------|-----------|
+| Railgun | Tight gap, thin lines |
+| Shotgun | Wider gap (spread hint) |
+| Bazooka | Thicker, longer lines |
+
+**Integration:**
+
+- `WeaponManager` → `weapon_switched` + `shot_fired`
+- `PushHitResolver` → hit/kill feedback when the player damages the opponent or cover
+- Hidden during countdown, match over, and when the mouse is not captured
 
 ## Controls
 
@@ -288,6 +363,7 @@ Godot 4.6+ → **F5** → `res://scenes/main.tscn`
 
 ```
 scripts/game_manager.gd
+scripts/ui/crosshair.gd
 scripts/enemies/arena_opponent.gd
 scripts/enemies/enemy_weapon_manager.gd
 scripts/arena_ui.gd

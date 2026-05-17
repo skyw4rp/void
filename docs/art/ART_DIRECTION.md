@@ -6,7 +6,7 @@
 
 ## Core Inspirations
 
-- **Quake** — dark industrial mood
+- **Quake** — dark industrial mood, **Q3A void maps** (toxic abyss under compact arenas)
 - **Unreal / liminal spaces**
 - **Infinite abyss** concepts
 - **Acrophobia / void anxiety**
@@ -42,7 +42,8 @@ Spaces must trigger instability and height anxiety:
 - Broken catwalks
 - Suspended structures
 - Long vertical shafts
-- Open pits **without visible bottom**
+- Open pits **without visible bottom** — read as **infinite toxic gas**, not flat black
+- **Compact combat slabs** (~12–20 u) with gaps and ruined walls (current prototype)
 - Hanging debris
 
 Player thought: **“If I fall, I disappear.”**

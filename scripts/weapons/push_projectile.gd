@@ -39,7 +39,14 @@ func configure(stats: Dictionary) -> void:
 	if mesh and stats.has("color"):
 		var mat: StandardMaterial3D = mesh.material_override.duplicate() as StandardMaterial3D
 		mat.albedo_color = stats.color
+		if stats.has("emission_energy"):
+			mat.emission_energy_multiplier = float(stats.emission_energy)
 		mesh.material_override = mat
+	var collision: CollisionShape3D = get_node_or_null("CollisionShape3D") as CollisionShape3D
+	if collision and stats.has("hit_radius"):
+		var shape: SphereShape3D = collision.shape.duplicate() as SphereShape3D
+		shape.radius = float(stats.hit_radius)
+		collision.shape = shape
 
 
 func _physics_process(delta: float) -> void:

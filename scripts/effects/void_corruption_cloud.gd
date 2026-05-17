@@ -32,8 +32,13 @@ func activate(position: Vector3) -> void:
 	_elapsed = 0.0
 	if _drift:
 		_drift.emitting = true
+		_drift.amount = 48
 	if _mist:
 		_mist.emitting = true
+		_mist.amount = 64
+	var atmo: Node = get_tree().get_first_node_in_group("void_atmosphere")
+	if atmo and atmo.has_method("boost_corruption_at"):
+		atmo.call("boost_corruption_at", position)
 	get_tree().create_timer(LIFETIME_SEC).timeout.connect(queue_free)
 
 

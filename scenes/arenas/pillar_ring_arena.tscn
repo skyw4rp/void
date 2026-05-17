@@ -1,0 +1,70 @@
+[gd_scene load_steps=5 format=3 uid="uid://carenapillarring01"]
+
+[ext_resource type="Script" path="res://scripts/environment/arena_zone.gd" id="1_zone"]
+
+[sub_resource type="StandardMaterial3D" id="Mat_stone"]
+albedo_color = Color(0.095, 0.09, 0.105, 1)
+roughness = 0.9
+metallic = 0.2
+
+[sub_resource type="BoxMesh" id="BoxMesh_unit"]
+size = Vector3(1, 1, 1)
+
+[sub_resource type="BoxShape3D" id="BoxShape_deck"]
+size = Vector3(1, 1, 1)
+
+[node name="PillarRingArena" type="Node3D"]
+script = ExtResource("1_zone")
+display_name = "Pillar Ring"
+arena_id = "pillar_ring"
+safe_half_x = 4.5
+danger_half_x = 5.5
+safe_half_z = 4.5
+danger_half_z = 5.5
+debris_x_min = -3.0
+debris_x_max = 3.0
+debris_z_min = -3.0
+debris_z_max = 3.0
+
+[node name="ArenaGeometry" type="Node3D" parent="."]
+
+[node name="RingDeck" type="MeshInstance3D" parent="ArenaGeometry"]
+transform = Transform3D(11, 0, 0, 0, 0.25, 0, 0, 0, 11, 0, 0, 0)
+material_override = SubResource("Mat_stone")
+mesh = SubResource("BoxMesh_unit")
+
+[node name="StaticBody3D" type="StaticBody3D" parent="ArenaGeometry/RingDeck"]
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="ArenaGeometry/RingDeck/StaticBody3D"]
+shape = SubResource("BoxShape_deck")
+
+[node name="PillarN" type="MeshInstance3D" parent="ArenaGeometry"]
+transform = Transform3D(0.65, 0, 0, 0, 3.4, 0, 0, 0, 0.65, 0, 1.7, 4.8)
+material_override = SubResource("Mat_stone")
+mesh = SubResource("BoxMesh_unit")
+
+[node name="PillarS" type="MeshInstance3D" parent="ArenaGeometry"]
+transform = Transform3D(0.65, 0, 0, 0, 3.4, 0, 0, 0, 0.65, 0, 1.7, -4.8)
+material_override = SubResource("Mat_stone")
+mesh = SubResource("BoxMesh_unit")
+
+[node name="PillarE" type="MeshInstance3D" parent="ArenaGeometry"]
+transform = Transform3D(0.65, 0, 0, 0, 3.4, 0, 0, 0, 0.65, 4.8, 1.7, 0)
+material_override = SubResource("Mat_stone")
+mesh = SubResource("BoxMesh_unit")
+
+[node name="PillarW" type="MeshInstance3D" parent="ArenaGeometry"]
+transform = Transform3D(0.65, 0, 0, 0, 3.4, 0, 0, 0, 0.65, -4.8, 1.7, 0)
+material_override = SubResource("Mat_stone")
+mesh = SubResource("BoxMesh_unit")
+
+[node name="BrokenPillar" type="MeshInstance3D" parent="ArenaGeometry"]
+transform = Transform3D(0.5, 0, 0, 0, 1.2, 0, 0, 0, 0.5, 2.5, 0.6, 2.5)
+material_override = SubResource("Mat_stone")
+mesh = SubResource("BoxMesh_unit")
+
+[node name="PlayerSpawn" type="Marker3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.1, 6)
+
+[node name="EnemySpawn" type="Marker3D" parent="."]
+transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, 0, 1, -6)

@@ -144,6 +144,7 @@ func begin_void_dying() -> void:
 	_base_camera_fov = camera.fov
 	collision_layer = 0
 	collision_mask = 0
+	VoidGasController.notify_fall_started(self)
 	if GameBalance.uses_void_gore_cinematic():
 		_ensure_void_fall_proxy()
 		if _void_fall_proxy:
@@ -156,6 +157,7 @@ func begin_void_instability() -> void:
 
 func end_void_dying() -> void:
 	_void_dying = false
+	VoidGasController.notify_fall_ended()
 	_hide_void_fall_proxy()
 	_enter_death_hidden_state()
 
@@ -265,6 +267,8 @@ func _clamp_knockback_velocity(airborne: bool) -> void:
 func arena_respawn(spawn_position: Vector3) -> void:
 	_spawn_position = spawn_position
 	global_position = spawn_position
+	if _game_manager and _game_manager.has_method("get_void_y"):
+		_void_y = _game_manager.get_void_y()
 	velocity = Vector3.ZERO
 	_void_reported = false
 	_void_dying = false
@@ -278,6 +282,7 @@ func arena_respawn(spawn_position: Vector3) -> void:
 	camera.rotation.x = 0.0
 	camera.rotation.z = 0.0
 	camera.fov = GameBalance.VOID_FALL_FOV_START
+	VoidGasController.notify_fall_ended()
 	# TODO: camera shake or screen flash on respawn.
 
 

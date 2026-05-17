@@ -1,0 +1,45 @@
+[gd_scene load_steps=3 format=3 uid="uid://cvoidarch01"]
+
+[ext_resource type="Script" path="res://scripts/environment/void_distant_architecture.gd" id="1_script"]
+
+[sub_resource type="BoxMesh" id="BoxMesh_unit"]
+size = Vector3(1, 1, 1)
+
+[node name="VoidDistantArchitecture" type="Node3D"]
+script = ExtResource("1_script")
+
+[node name="BrokenBridgeFar" type="MeshInstance3D" parent="."]
+transform = Transform3D(18, 0, 0, 0, 0.35, 0, 0, 0, 4, 0, -2, 55)
+mesh = SubResource("BoxMesh_unit")
+
+[node name="FloatingPlatformA" type="MeshInstance3D" parent="."]
+transform = Transform3D(8, 0, 0, 0, 0.5, 0, 0, 0, 8, -42, -6, 28)
+mesh = SubResource("BoxMesh_unit")
+
+[node name="FloatingPlatformB" type="MeshInstance3D" parent="."]
+transform = Transform3D(6, 0, 0, 0, 0.4, 0, 0, 0, 6, 48, -10, -35)
+mesh = SubResource("BoxMesh_unit")
+
+[node name="PillarClusterN" type="MeshInstance3D" parent="."]
+transform = Transform3D(0.8, 0, 0, 0, 12, 0, 0, 0, 0.8, -25, 2, 62)
+mesh = SubResource("BoxMesh_unit")
+
+[node name="PillarClusterE" type="MeshInstance3D" parent="."]
+transform = Transform3D(0.7, 0, 0, 0, 9, 0, 0, 0, 0.7, 58, -4, 12)
+mesh = SubResource("BoxMesh_unit")
+
+[node name="PillarClusterW" type="MeshInstance3D" parent="."]
+transform = Transform3D(0.75, 0, 0, 0, 11, 0, 0, 0, 0.75, -55, -2, -18)
+mesh = SubResource("BoxMesh_unit")
+
+[node name="RuinSilhouette" type="MeshInstance3D" parent="."]
+transform = Transform3D(14, 0, 0, 0, 2.5, 0, 0, 0, 10, 30, -8, -58)
+mesh = SubResource("BoxMesh_unit")
+
+[node name="HangingSpan" type="MeshInstance3D" parent="."]
+transform = Transform3D(22, 0, 0, 0, 0.2, 0, 0, 0, 2.5, -12, 8, 40)
+mesh = SubResource("BoxMesh_unit")
+
+[node name="DistantBlock" type="MeshInstance3D" parent="."]
+transform = Transform3D(5, 0, 0, 0, 5, 0, 0, 0, 5, 0, -14, 70)
+mesh = SubResource("BoxMesh_unit")

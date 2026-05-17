@@ -2,6 +2,8 @@
 extends Node3D
 
 signal weapon_changed(weapon_name: String)
+signal weapon_switched(weapon: WeaponDefs.Id)
+signal shot_fired
 
 @export var spawn_forward_offset: float = 0.6
 
@@ -53,6 +55,7 @@ func switch_weapon(weapon: WeaponDefs.Id) -> void:
 	_bazooka_view.visible = weapon == WeaponDefs.Id.BAZOOKA
 	print("Weapon: %s" % WeaponDefs.get_weapon_name(weapon))
 	weapon_changed.emit(WeaponDefs.get_weapon_name(weapon))
+	weapon_switched.emit(weapon)
 
 
 func try_fire() -> bool:
@@ -74,6 +77,7 @@ func try_fire() -> bool:
 	)
 	if _current == WeaponDefs.Id.RAILGUN:
 		print("Railgun")
+	shot_fired.emit()
 	return true
 
 

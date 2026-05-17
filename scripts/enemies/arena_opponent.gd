@@ -1,7 +1,7 @@
-## 1v1 bridge arena AI — rectangular bounds, edge recovery, ring-out tactics.
+## 1v1 arena AI — compact arenas, cover, hole avoidance, ring-out tactics.
 extends RigidBody3D
 
-enum AiState { ATTACKING, RECOVERING }
+enum AiState { ATTACKING, RECOVERING, IN_COVER }
 
 @export var move_force: float = 10.0
 @export var strafe_force: float = 8.0
@@ -10,12 +10,14 @@ enum AiState { ATTACKING, RECOVERING }
 @export var void_y: float = -20.0
 @export var aim_height_offset: float = 1.2
 
-@export var close_range: float = 5.0
-@export var medium_range: float = 12.0
-@export var ideal_distance_min: float = 4.0
-@export var ideal_distance_max: float = 11.0
+@export var close_range: float = 4.5
+@export var medium_range: float = 10.0
+@export var ideal_distance_min: float = 3.5
+@export var ideal_distance_max: float = 8.5
+@export var cover_seek_force: float = 11.0
+@export var hole_avoid_force: float = 22.0
 
-## Bridge half-extents: deck is 8×28 (±4 on X, ±14 on Z).
+## Per-arena safe/danger half-extents (set from ArenaGenerator each round).
 @export var safe_half_x: float = 3.2
 @export var danger_half_x: float = 3.8
 @export var safe_half_z: float = 12.0
@@ -27,6 +29,13 @@ enum AiState { ATTACKING, RECOVERING }
 @export var weapon_shuffle_max: float = 6.0
 @export var fire_attempt_interval_min: float = 0.4
 @export var fire_attempt_interval_max: float = 0.9
+@export var railgun_fire_interval_min: float = 0.55
+@export var railgun_fire_interval_max: float = 0.95
+@export var railgun_aim_error: float = 0.65
+@export var bazooka_fire_interval_min: float = 0.7
+@export var bazooka_fire_interval_max: float = 1.2
+@export var bazooka_pick_chance_aggressive: float = 0.4
+@export var bazooka_pick_chance_medium: float = 0.26
 @export var knockback_recovery_speed: float = 7.5
 @export var recovery_duration_min: float = 0.8
 @export var recovery_duration_max: float = 1.2
@@ -51,8 +60,13 @@ var _prev_horizontal_speed: float = 0.0
 var _death_handled: bool = false
 var _void_dying: bool = false
 var _void_instability_time: float = 0.0
+var _arena_generator: ArenaGenerator
+var _arena_walls: Array[Node3D] = []
+var _cover_timer: float = 0.0
+var _cover_duration: float = 0.0
 
 const CORPSE_ALBEDO: Color = Color(0.85, 0.15, 0.2)
+const WALL_GROUP: String = "arena_wall"
 const CORPSE_EMISSION: Color = Color(0.45, 0.05, 0.12)
 
 
@@ -245,7 +259,19 @@ func _physics_process(delta: float) -> void:
 
 	if _state == AiState.RECOVERING:
 		_apply_edge_safety_forces(offset, true)
+		_apply_hole_avoidance()
 		_move_toward_center(edge_avoid_force * 1.2)
+		_clamp_horizontal_speed()
+		_prev_horizontal_speed = _horizontal_speed()
+		return
+
+	if _state == AiState.IN_COVER:
+		_apply_edge_safety_forces(offset, true)
+		_apply_hole_avoidance()
+		_apply_cover_seek_force()
+		_apply_idle_strafe()
+		_update_weapon_ai(delta, distance_to_player, offset)
+		_update_cover_state(delta, offset)
 		_clamp_horizontal_speed()
 		_prev_horizontal_speed = _horizontal_speed()
 		return
@@ -254,16 +280,31 @@ func _physics_process(delta: float) -> void:
 		_avoiding_edge_logged = false
 
 	_apply_edge_safety_forces(offset, false)
+	_apply_hole_avoidance()
+	_try_enter_cover(distance_to_player, offset)
 	_update_combat_movement(delta, horizontal_to_player, distance_to_player, offset)
 	_update_weapon_ai(delta, distance_to_player, offset)
+	_update_cover_state(delta, offset)
 
 	_prev_horizontal_speed = _horizontal_speed()
 	_clamp_horizontal_speed()
 
 
+func apply_arena_bounds_from_dict(bounds: Dictionary) -> void:
+	arena_center = bounds.get("center", Vector3.ZERO)
+	safe_half_x = bounds.get("safe_half_x", safe_half_x)
+	danger_half_x = bounds.get("danger_half_x", danger_half_x)
+	safe_half_z = bounds.get("safe_half_z", safe_half_z)
+	danger_half_z = bounds.get("danger_half_z", danger_half_z)
+	_arena_generator = get_tree().get_first_node_in_group("arena_generator") as ArenaGenerator
+	_refresh_arena_walls()
+
+
 func arena_respawn(spawn_position: Vector3) -> void:
 	_spawn_position = spawn_position
 	global_position = spawn_position
+	if _game_manager and _game_manager.has_method("get_void_y"):
+		void_y = _game_manager.get_void_y()
 	linear_velocity = Vector3.ZERO
 	angular_velocity = Vector3.ZERO
 	_void_reported = false
@@ -327,6 +368,8 @@ func _set_state(new_state: AiState) -> void:
 			print("Enemy state: ATTACKING")
 		AiState.RECOVERING:
 			print("Enemy state: RECOVERING")
+		AiState.IN_COVER:
+			print("Enemy state: IN_COVER")
 
 
 func _enter_recovery() -> void:
@@ -414,7 +457,7 @@ func _update_combat_movement(
 	var to_player_dir: Vector3 = horizontal_to_player.normalized()
 	var strafe_dir: Vector3 = to_player_dir.cross(Vector3.UP).normalized() * _strafe_sign
 	var near_edge: bool = _is_past_safe(offset)
-	var can_chase_forward: bool = not near_edge
+	var can_chase_forward: bool = not near_edge and _floor_ahead(to_player_dir)
 	var evasive: bool = _is_low_combat()
 	var retreat_scale: float = 1.35 if evasive else 1.0
 	var strafe_scale: float = 1.2 if evasive else 1.0
@@ -423,13 +466,18 @@ func _update_combat_movement(
 		apply_central_force(-to_player_dir * retreat_force * retreat_scale)
 		apply_central_force(strafe_dir * strafe_force * 0.65 * strafe_scale)
 	elif distance > ideal_distance_max:
-		if can_chase_forward:
+		if can_chase_forward and _floor_ahead(to_player_dir):
 			apply_central_force(to_player_dir * move_force)
+		elif not _has_line_of_sight_to_player():
+			_apply_cover_seek_force()
 		_move_toward_center(edge_avoid_force * 0.35)
 		apply_central_force(strafe_dir * strafe_force * 0.45 * strafe_scale)
 	else:
+		if not _has_line_of_sight_to_player() and distance > close_range:
+			_apply_cover_seek_force()
 		apply_central_force(strafe_dir * strafe_force * strafe_scale)
-		apply_central_force(to_player_dir * move_force * 0.25)
+		if _floor_ahead(to_player_dir):
+			apply_central_force(to_player_dir * move_force * 0.25)
 
 
 func _apply_idle_strafe() -> void:
@@ -459,6 +507,14 @@ func _update_weapon_ai(delta: float, distance: float, offset: Vector3) -> void:
 
 	var preferred: WeaponDefs.Id = _choose_weapon(distance, offset)
 	_weapons.switch_weapon(preferred)
+	if preferred == WeaponDefs.Id.RAILGUN:
+		_fire_attempt_timer = maxf(
+			_fire_attempt_timer, randf_range(railgun_fire_interval_min, railgun_fire_interval_max)
+		)
+	elif preferred == WeaponDefs.Id.BAZOOKA:
+		_fire_attempt_timer = maxf(
+			_fire_attempt_timer, randf_range(bazooka_fire_interval_min, bazooka_fire_interval_max)
+		)
 	_try_shot()
 
 
@@ -468,24 +524,152 @@ func _choose_weapon(distance: float, enemy_offset: Vector3) -> WeaponDefs.Id:
 	var player_near_edge: bool = _is_past_safe(player_offset)
 	var ringout_shot: bool = _has_ringout_shot_angle()
 	var aggressive: bool = player_near_edge or ringout_shot
+	var has_los: bool = _has_line_of_sight_to_player()
 
 	if distance < close_range:
 		return WeaponDefs.Id.SHOTGUN
 
+	if not has_los and distance < medium_range:
+		return WeaponDefs.Id.SHOTGUN
+
 	if aggressive:
-		if distance < medium_range and randf() > 0.38:
+		if distance < medium_range and randf() < bazooka_pick_chance_aggressive:
 			return WeaponDefs.Id.BAZOOKA
 		if distance < close_range + 2.5:
 			return WeaponDefs.Id.SHOTGUN
 
 	if distance < medium_range and not _is_past_safe(enemy_offset):
-		if randf() > 0.55:
+		if randf() < bazooka_pick_chance_medium:
 			return WeaponDefs.Id.BAZOOKA
 
-	if distance > medium_range:
-		return WeaponDefs.Id.RAILGUN
+	if distance > medium_range and has_los:
+		if randf() > 0.32:
+			return WeaponDefs.Id.RAILGUN
+		return WeaponDefs.Id.BAZOOKA
 
-	return WeaponDefs.Id.RAILGUN
+	if distance > medium_range:
+		return WeaponDefs.Id.BAZOOKA
+
+	if has_los and randf() > 0.28:
+		return WeaponDefs.Id.RAILGUN
+	return WeaponDefs.Id.SHOTGUN
+
+
+func _refresh_arena_walls() -> void:
+	_arena_walls.clear()
+	for group_name in [WALL_GROUP, "arena_perimeter"]:
+		for node in get_tree().get_nodes_in_group(group_name):
+			if node is Node3D and not _arena_walls.has(node):
+				_arena_walls.append(node as Node3D)
+
+
+func _has_line_of_sight_to_player() -> bool:
+	if _player == null:
+		return false
+	var space: PhysicsDirectSpaceState3D = get_world_3d().direct_space_state
+	if space == null:
+		return true
+	var origin: Vector3 = _weapon_pivot.global_position
+	var target: Vector3 = _player.global_position + Vector3(0.0, aim_height_offset * 0.6, 0.0)
+	var query := PhysicsRayQueryParameters3D.create(origin, target)
+	query.collision_mask = 1
+	query.exclude = [get_rid()]
+	var hit: Dictionary = space.intersect_ray(query)
+	if hit.is_empty():
+		return true
+	var collider: Object = hit.collider as Object
+	if collider == _player:
+		return true
+	if collider is Node and _player.is_ancestor_of(collider as Node):
+		return true
+	return false
+
+
+func _floor_ahead(direction: Vector3, distance: float = 2.0) -> bool:
+	if _arena_generator:
+		return _arena_generator.is_floor_ahead(global_position, direction, distance)
+	return true
+
+
+func _is_over_gap() -> bool:
+	if _arena_generator:
+		return not _arena_generator.has_floor_at(global_position.x, global_position.z)
+	return false
+
+
+func _apply_hole_avoidance() -> void:
+	if not _is_over_gap():
+		return
+	var to_center: Vector3 = _direction_to_center()
+	if to_center != Vector3.ZERO:
+		apply_central_force(to_center * hole_avoid_force)
+
+
+func _apply_cover_seek_force() -> void:
+	var flank: Vector3 = _pick_cover_direction()
+	if flank != Vector3.ZERO:
+		apply_central_force(flank * cover_seek_force)
+
+
+func _pick_cover_direction() -> Vector3:
+	if _arena_walls.is_empty() or _player == null:
+		return Vector3.ZERO
+	var to_player: Vector3 = _player.global_position - global_position
+	to_player.y = 0.0
+	if to_player.length_squared() < 0.05:
+		return Vector3.ZERO
+	to_player = to_player.normalized()
+
+	var best_dir: Vector3 = Vector3.ZERO
+	var best_score: float = -INF
+	for wall in _arena_walls:
+		if not is_instance_valid(wall):
+			continue
+		var to_wall: Vector3 = wall.global_position - global_position
+		to_wall.y = 0.0
+		var dist: float = to_wall.length()
+		if dist < 1.2 or dist > 14.0:
+			continue
+		var dir: Vector3 = to_wall.normalized()
+		var flank_score: float = 1.0 - absf(dir.dot(to_player))
+		var score: float = flank_score * 12.0 - dist * 0.35
+		if score > best_score:
+			best_score = score
+			best_dir = dir
+	return best_dir
+
+
+func _try_enter_cover(distance: float, offset: Vector3) -> void:
+	if _state != AiState.ATTACKING:
+		return
+	if _is_past_safe(offset) or _is_low_combat():
+		return
+	if distance < close_range + 1.0:
+		return
+	if _has_line_of_sight_to_player():
+		if distance > medium_range and randf() > 0.92:
+			_enter_cover()
+		return
+	if randf() > 0.55:
+		_enter_cover()
+
+
+func _enter_cover() -> void:
+	_cover_duration = randf_range(1.2, 2.4)
+	_cover_timer = _cover_duration
+	_set_state(AiState.IN_COVER)
+
+
+func _update_cover_state(delta: float, offset: Vector3) -> void:
+	if _state != AiState.IN_COVER:
+		return
+	_cover_timer -= delta
+	if _cover_timer <= 0.0 or _is_past_danger(offset):
+		_set_state(AiState.ATTACKING)
+		return
+	if _has_line_of_sight_to_player() and _cover_timer < _cover_duration * 0.35:
+		if randf() > 0.6:
+			_set_state(AiState.ATTACKING)
 
 
 func _has_ringout_shot_angle() -> bool:
@@ -522,11 +706,18 @@ func _aim_at_player() -> void:
 
 func _try_shot() -> void:
 	var aim_point: Vector3 = _player.global_position + Vector3(0.0, aim_height_offset, 0.0)
+	if _weapons.get_weapon() == WeaponDefs.Id.RAILGUN:
+		aim_point += _sample_railgun_aim_error()
 	var origin: Vector3 = _weapon_pivot.global_position
 	var direction: Vector3 = (aim_point - origin).normalized()
 	if direction.length_squared() < 0.01:
 		return
 	_weapons.try_fire(origin, direction, _weapon_pivot.global_transform.basis)
+
+
+func _sample_railgun_aim_error() -> Vector3:
+	var e: float = railgun_aim_error
+	return Vector3(randf_range(-e, e), randf_range(-e * 0.45, e * 0.45), randf_range(-e, e))
 
 
 func _clamp_horizontal_speed() -> void:

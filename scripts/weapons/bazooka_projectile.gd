@@ -6,8 +6,8 @@ extends Area3D
 @export var push_force: float = 28.0
 @export var explosion_radius: float = 5.0
 @export var explosion_force: float = 35.0
-@export var direct_damage: int = 35
-@export var explosion_damage: int = 45
+@export var direct_damage: int = 100
+@export var explosion_damage: int = 60
 
 var _direction: Vector3 = Vector3.FORWARD
 var _spent: bool = false

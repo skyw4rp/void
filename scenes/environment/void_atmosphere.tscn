@@ -1,19 +1,72 @@
-[gd_scene load_steps=6 format=3 uid="uid://cvoidatmosphere01"]
+[gd_scene load_steps=12 format=3 uid="uid://cvoidatmosphere01"]
 
 [ext_resource type="Script" path="res://scripts/environment/void_atmosphere.gd" id="1_script"]
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_fog_upper"]
+transparency = 1
+blend_mode = 1
+shading_mode = 0
+albedo_color = Color(0.05, 0.12, 0.09, 0.14)
+cull_mode = 2
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_fog_a"]
 transparency = 1
 blend_mode = 1
 shading_mode = 0
-albedo_color = Color(0.008, 0.02, 0.045, 0.18)
+albedo_color = Color(0.04, 0.14, 0.1, 0.28)
+emission_enabled = true
+emission = Color(0.08, 0.22, 0.14, 1)
+emission_energy_multiplier = 0.35
 cull_mode = 2
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_fog_b"]
 transparency = 1
 blend_mode = 1
 shading_mode = 0
-albedo_color = Color(0.004, 0.012, 0.035, 0.28)
+albedo_color = Color(0.03, 0.08, 0.16, 0.38)
+emission_enabled = true
+emission = Color(0.12, 0.08, 0.28, 1)
+emission_energy_multiplier = 0.25
+cull_mode = 2
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_fog_deep"]
+transparency = 1
+blend_mode = 1
+shading_mode = 0
+albedo_color = Color(0.04, 0.06, 0.12, 0.55)
+emission_enabled = true
+emission = Color(0.1, 0.05, 0.22, 1)
+emission_energy_multiplier = 0.2
+cull_mode = 2
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_haze"]
+transparency = 1
+blend_mode = 1
+shading_mode = 0
+albedo_color = Color(0.1, 0.05, 0.12, 0.35)
+emission_enabled = true
+emission = Color(0.18, 0.04, 0.12, 1)
+emission_energy_multiplier = 0.3
+cull_mode = 2
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_gas_sea"]
+transparency = 1
+blend_mode = 1
+shading_mode = 0
+albedo_color = Color(0.02, 0.1, 0.08, 0.55)
+emission_enabled = true
+emission = Color(0.15, 0.35, 0.2, 1)
+emission_energy_multiplier = 0.5
+cull_mode = 2
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_gas_swirl"]
+transparency = 1
+blend_mode = 1
+shading_mode = 0
+albedo_color = Color(0.05, 0.06, 0.18, 0.38)
+emission_enabled = true
+emission = Color(0.2, 0.1, 0.45, 1)
+emission_energy_multiplier = 0.4
 cull_mode = 2
 
 [sub_resource type="BoxMesh" id="BoxMesh_fog"]
@@ -24,36 +77,103 @@ script = ExtResource("1_script")
 
 [node name="AbyssLayers" type="Node3D" parent="."]
 
+[node name="ToxicGasSea" type="MeshInstance3D" parent="AbyssLayers"]
+transform = Transform3D(72, 0, 0, 0, 1, 0, 0, 0, 78, 0, -24, 0)
+material_override = SubResource("StandardMaterial3D_gas_sea")
+mesh = SubResource("BoxMesh_fog")
+
+[node name="ToxicGasSwirl" type="MeshInstance3D" parent="AbyssLayers"]
+transform = Transform3D(42, 0, 0, 0, 1, 0, 0, 0, 46, 0, -18, 0)
+material_override = SubResource("StandardMaterial3D_gas_swirl")
+mesh = SubResource("BoxMesh_fog")
+
+[node name="FogLayerUpper" type="MeshInstance3D" parent="AbyssLayers"]
+visible = false
+transform = Transform3D(48, 0, 0, 0, 1, 0, 0, 0, 52, 0, -14, 0)
+material_override = SubResource("StandardMaterial3D_fog_upper")
+mesh = SubResource("BoxMesh_fog")
+
 [node name="FogLayerA" type="MeshInstance3D" parent="AbyssLayers"]
-transform = Transform3D(55, 0, 0, 0, 1, 0, 0, 0, 65, 0, -8, 0)
+visible = false
+transform = Transform3D(50, 0, 0, 0, 1, 0, 0, 0, 54, 0, -20, 0)
 material_override = SubResource("StandardMaterial3D_fog_a")
 mesh = SubResource("BoxMesh_fog")
 
 [node name="FogLayerB" type="MeshInstance3D" parent="AbyssLayers"]
-transform = Transform3D(70, 0, 0, 0, 1, 0, 0, 0, 80, 0, -14, 0)
+visible = false
+transform = Transform3D(56, 0, 0, 0, 1, 0, 0, 0, 60, 0, -26, 0)
 material_override = SubResource("StandardMaterial3D_fog_b")
 mesh = SubResource("BoxMesh_fog")
 
+[node name="FogLayerDeep" type="MeshInstance3D" parent="AbyssLayers"]
+visible = false
+transform = Transform3D(52, 0, 0, 0, 1, 0, 0, 0, 56, 0, -32, 0)
+material_override = SubResource("StandardMaterial3D_fog_deep")
+mesh = SubResource("BoxMesh_fog")
+
+[node name="CorruptionHaze" type="MeshInstance3D" parent="AbyssLayers"]
+visible = false
+transform = Transform3D(40, 0, 0, 0, 1, 0, 0, 0, 44, 0, -38, 0)
+material_override = SubResource("StandardMaterial3D_haze")
+mesh = SubResource("BoxMesh_fog")
+
 [node name="AbyssDriftParticles" type="CPUParticles3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -12, 0)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -20, 0)
+amount = 96
+lifetime = 7.0
+emission_shape = 3
+emission_box_extents = Vector3(18, 6, 22)
+direction = Vector3(0.12, 0.55, 0.08)
+spread = 30.0
+gravity = Vector3(0, 0.06, 0)
+initial_velocity_min = 0.2
+initial_velocity_max = 0.75
+scale_amount_min = 0.05
+scale_amount_max = 0.16
+color = Color(0.18, 0.5, 0.32, 0.45)
+
+[node name="ToxicMotes" type="CPUParticles3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -22, 0)
+amount = 48
+lifetime = 9.0
+emission_shape = 3
+emission_box_extents = Vector3(24, 10, 28)
+direction = Vector3(-0.08, 0.42, 0.05)
+spread = 42.0
+gravity = Vector3(0, 0.04, 0)
+initial_velocity_min = 0.12
+initial_velocity_max = 0.5
+scale_amount_min = 0.08
+scale_amount_max = 0.22
+color = Color(0.32, 0.18, 0.58, 0.32)
+
+[node name="DeepAshParticles" type="CPUParticles3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -20, 0)
+emitting = false
 amount = 64
 lifetime = 6.0
 emission_shape = 3
-emission_box_extents = Vector3(22, 8, 32)
-direction = Vector3(0, 0.4, 0)
-spread = 25.0
-gravity = Vector3(0, 0.08, 0)
-initial_velocity_min = 0.15
-initial_velocity_max = 0.55
-scale_amount_min = 0.04
-scale_amount_max = 0.12
-color = Color(0.25, 0.4, 0.55, 0.35)
+emission_box_extents = Vector3(5, 3, 5)
+direction = Vector3(0.05, 0.25, 0.02)
+spread = 55.0
+gravity = Vector3(0, 0.02, 0)
+initial_velocity_min = 0.05
+initial_velocity_max = 0.35
+scale_amount_min = 0.1
+scale_amount_max = 0.28
+color = Color(0.12, 0.08, 0.14, 0.55)
 
 [node name="DepthPulseLight" type="OmniLight3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -18, 0)
-light_color = Color(0.2, 0.35, 0.55, 1)
-light_energy = 0.3
-omni_range = 45.0
+light_color = Color(0.18, 0.42, 0.32, 1)
+light_energy = 0.28
+omni_range = 50.0
+
+[node name="ToxicGlowLight" type="OmniLight3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -12, 0)
+light_color = Color(0.28, 0.15, 0.55, 1)
+light_energy = 0.38
+omni_range = 38.0
 
 [node name="Observers" type="Node3D" parent="."]
 
@@ -69,4 +189,12 @@ mesh = SubResource("BoxMesh_fog")
 
 [node name="Debris3" type="MeshInstance3D" parent="HangingDebris"]
 transform = Transform3D(1.2, 0, 0, 0, 0.08, 0, 0, 0, 0.35, 2.2, 4.5, 11)
+mesh = SubResource("BoxMesh_fog")
+
+[node name="ChainA" type="MeshInstance3D" parent="HangingDebris"]
+transform = Transform3D(0.12, 0, 0, 0, 5.5, 0, 0, 0, 0.12, -3.5, 1.5, 6)
+mesh = SubResource("BoxMesh_fog")
+
+[node name="ChainB" type="MeshInstance3D" parent="HangingDebris"]
+transform = Transform3D(0.1, 0, 0, 0, 4.2, 0, 0, 0, 0.1, 4.2, 2.2, -5)
 mesh = SubResource("BoxMesh_fog")

@@ -1,0 +1,15 @@
+[gd_scene load_steps=3 format=3 uid="uid://carenagenerator01"]
+
+[ext_resource type="Script" path="res://scripts/arena/arena_generator.gd" id="1_generator"]
+[ext_resource type="Script" path="res://scripts/props/debris_spawner.gd" id="2_debris"]
+
+[node name="ArenaGenerator" type="Node3D"]
+script = ExtResource("1_generator")
+debug_show_markers = true
+
+[node name="ActiveArena" type="Node3D" parent="."]
+
+[node name="DebugMarkers" type="Node3D" parent="."]
+
+[node name="DebrisSpawner" type="Node3D" parent="."]
+script = ExtResource("2_debris")

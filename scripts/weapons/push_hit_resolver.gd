@@ -103,13 +103,39 @@ static func apply_damage_to_target(
 ) -> void:
 	if amount <= 0:
 		return
-	if body.has_method("take_damage"):
-		body.call("take_damage", amount, attacker, direction, force, source)
+	if body.has_method("damage_cover"):
+		body.call("damage_cover", amount, attacker, direction, force, source)
+		if _is_player_attacker(attacker) and body.is_inside_tree():
+			Crosshair.notify_player_hit_cover(body.get_tree())
 		return
 	var stats: CombatStats = body.get_node_or_null("CombatStats") as CombatStats
 	if stats:
 		stats.record_hit(direction, force, attacker, source)
+		var shield_before: int = stats.shield
+		var health_before: int = stats.health
 		stats.apply_damage(amount, attacker)
+		if _is_player_attacker(attacker) and body.is_in_group("arena_opponent"):
+			Crosshair.notify_player_damage_to(
+				body.get_tree(), body, shield_before, health_before
+			)
+		return
+	if body.has_method("take_damage"):
+		body.call("take_damage", amount, attacker, direction, force, source)
+		return
+
+
+static func _is_player_attacker(attacker: Node) -> bool:
+	if attacker == null:
+		return false
+	if attacker.is_in_group("player"):
+		return true
+	var tree: SceneTree = attacker.get_tree()
+	if tree == null:
+		return false
+	var player: Node = tree.get_first_node_in_group("player")
+	if player == null:
+		return false
+	return attacker == player or player.is_ancestor_of(attacker)
 
 
 ## Projectile hit with damped vertical (bazooka direct impact).

@@ -1,0 +1,64 @@
+[gd_scene load_steps=5 format=3 uid="uid://carenacentralruins01"]
+
+[ext_resource type="Script" path="res://scripts/environment/arena_zone.gd" id="1_zone"]
+
+[sub_resource type="StandardMaterial3D" id="Mat_ruin"]
+albedo_color = Color(0.09, 0.085, 0.1, 1)
+roughness = 0.93
+
+[sub_resource type="BoxMesh" id="BoxMesh_unit"]
+size = Vector3(1, 1, 1)
+
+[sub_resource type="BoxShape3D" id="BoxShape_deck"]
+size = Vector3(1, 1, 1)
+
+[node name="CentralRuinsArena" type="Node3D"]
+script = ExtResource("1_zone")
+display_name = "Central Ruins"
+arena_id = "central_ruins"
+safe_half_x = 4.2
+danger_half_x = 5.0
+safe_half_z = 4.2
+danger_half_z = 5.0
+debris_x_min = -3.2
+debris_x_max = 3.2
+debris_z_min = -3.2
+debris_z_max = 3.2
+
+[node name="ArenaGeometry" type="Node3D" parent="."]
+
+[node name="RuinPad" type="MeshInstance3D" parent="ArenaGeometry"]
+transform = Transform3D(10, 0, 0, 0, 0.26, 0, 0, 0, 10, 0, 0, 0)
+material_override = SubResource("Mat_ruin")
+mesh = SubResource("BoxMesh_unit")
+
+[node name="StaticBody3D" type="StaticBody3D" parent="ArenaGeometry/RuinPad"]
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="ArenaGeometry/RuinPad/StaticBody3D"]
+shape = SubResource("BoxShape_deck")
+
+[node name="WallStubN" type="MeshInstance3D" parent="ArenaGeometry"]
+transform = Transform3D(2.5, 0, 0, 0, 1.8, 0, 0, 0, 0.35, 0, 0.9, 4.2)
+material_override = SubResource("Mat_ruin")
+mesh = SubResource("BoxMesh_unit")
+
+[node name="WallStubS" type="MeshInstance3D" parent="ArenaGeometry"]
+transform = Transform3D(2.5, 0, 0, 0, 1.8, 0, 0, 0, 0.35, 0, 0.9, -4.2)
+material_override = SubResource("Mat_ruin")
+mesh = SubResource("BoxMesh_unit")
+
+[node name="FallenBlock" type="MeshInstance3D" parent="ArenaGeometry"]
+transform = Transform3D(1.8, 0, 0, 0, 0.5, 0, 0, 0, 1.2, -2.5, 0.25, 1.5)
+material_override = SubResource("Mat_ruin")
+mesh = SubResource("BoxMesh_unit")
+
+[node name="BrokenArch" type="MeshInstance3D" parent="ArenaGeometry"]
+transform = Transform3D(0.4, 0, 0, 0, 2.2, 0, 0, 0, 2.8, 2.8, 1.1, -2.0)
+material_override = SubResource("Mat_ruin")
+mesh = SubResource("BoxMesh_unit")
+
+[node name="PlayerSpawn" type="Marker3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.1, 6)
+
+[node name="EnemySpawn" type="Marker3D" parent="."]
+transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, 0, 1, -6)

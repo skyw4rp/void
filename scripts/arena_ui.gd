@@ -9,13 +9,20 @@ extends CanvasLayer
 @onready var _countdown_label: Label = $CountdownLabel
 @onready var _death_label: Label = $DeathLabel
 @onready var _void_overlay: ColorRect = $VoidOverlay
+@onready var _void_gas_vignette: ColorRect = $VoidGasVignette
+@onready var _void_gas_tint: ColorRect = $VoidGasTint
 
 
 func _ready() -> void:
+	add_to_group("arena_ui")
 	_match_label.visible = false
 	_countdown_label.visible = false
 	_death_label.visible = false
 	_void_overlay.visible = false
+	if _void_gas_vignette:
+		_void_gas_vignette.visible = false
+	if _void_gas_tint:
+		_void_gas_tint.visible = false
 	_update_score(0, 0)
 	_update_player_stats(100, 100)
 	_update_enemy_stats(100, 100)
@@ -44,12 +51,14 @@ func _bind_combat_stats() -> void:
 	if player and player.has_node("CombatStats"):
 		var stats: CombatStats = player.get_node("CombatStats") as CombatStats
 		stats.stats_changed.connect(_on_player_stats_changed)
+		stats.shield_broken.connect(_on_player_shield_broken)
 		_on_player_stats_changed(stats.shield, stats.health)
 
 	var opponent := get_tree().get_first_node_in_group("arena_opponent")
 	if opponent and opponent.has_node("CombatStats"):
 		var enemy_stats: CombatStats = opponent.get_node("CombatStats") as CombatStats
 		enemy_stats.stats_changed.connect(_on_enemy_stats_changed)
+		enemy_stats.shield_broken.connect(_on_enemy_shield_broken)
 		_on_enemy_stats_changed(enemy_stats.shield, enemy_stats.health)
 
 
@@ -81,6 +90,24 @@ func _update_enemy_stats(health: int, shield: int) -> void:
 	_enemy_stats_label.text = "Enemy HP: %d | Shield: %d" % [health, shield]
 
 
+func _on_player_shield_broken(source: String) -> void:
+	if source == "railgun" or source == "bazooka_direct":
+		_flash_stats_label(_player_stats_label, Color(0.35, 0.92, 1.0))
+
+
+func _on_enemy_shield_broken(source: String) -> void:
+	if source == "railgun" or source == "bazooka_direct":
+		_flash_stats_label(_enemy_stats_label, Color(0.35, 0.92, 1.0))
+
+
+func _flash_stats_label(label: Label, flash_color: Color) -> void:
+	if label == null:
+		return
+	var tween := create_tween()
+	label.modulate = flash_color
+	tween.tween_property(label, "modulate", Color.WHITE, 0.35).set_ease(Tween.EASE_OUT)
+
+
 func _on_countdown_text(text: String) -> void:
 	_countdown_label.visible = true
 	_countdown_label.text = text
@@ -102,9 +129,26 @@ func _on_death_message_hidden() -> void:
 func _on_void_overlay_changed(active: bool, player_fell: bool) -> void:
 	_void_overlay.visible = active
 	if player_fell:
-		_void_overlay.color = Color(0.03, 0.06, 0.14, 0.48)
+		_void_overlay.color = Color(0.02, 0.08, 0.1, 0.42)
 	else:
-		_void_overlay.color = Color(0.05, 0.08, 0.16, 0.35)
+		_void_overlay.color = Color(0.04, 0.07, 0.12, 0.32)
+
+
+func apply_void_gas_screen(depth_t: float, falling: bool) -> void:
+	var active: bool = falling and depth_t > 0.04
+	if _void_gas_vignette:
+		_void_gas_vignette.visible = active
+		if active:
+			var edge: float = lerpf(0.0, 0.88, depth_t)
+			_void_gas_vignette.color = Color(0.01, 0.05, 0.04, edge)
+	if _void_gas_tint:
+		_void_gas_tint.visible = active
+		if active:
+			var gas := Color(0.04, 0.12, 0.1, lerpf(0.0, 0.72, depth_t))
+			gas = gas.lerp(Color(0.1, 0.03, 0.08, gas.a), depth_t * 0.35)
+			_void_gas_tint.color = gas
+	if active and _void_overlay.visible:
+		_void_overlay.color.a = lerpf(0.38, 0.78, depth_t)
 
 
 func _on_match_over(player_won: bool) -> void:

@@ -63,8 +63,8 @@ static func _fire_railgun(
 	)
 
 	if hit_body != null and not PushHitResolver.is_shooter(hit_body, shooter):
-		var damage: int = stats.get("damage", 22)
-		var push_force: float = stats.get("push_force", 34.0)
+		var damage: int = stats.get("damage", 100)
+		var push_force: float = stats.get("push_force", 68.0)
 		var source: String = stats.get("damage_source", "railgun")
 		PushHitResolver.apply_railgun_hit(
 			hit_body, direction, push_force, hit_pos, damage, shooter, source
