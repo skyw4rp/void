@@ -1,12 +1,12 @@
-## Quake-style arena spawn platform — team accent ring, floor-aligned, low profile.
+## Low-profile Quake-style spawn marker — floor-flush ring, team accent.
 class_name SpawnPad
 extends Node3D
 
 enum Team { PLAYER, ENEMY }
 
-const PAD_HEIGHT: float = 0.2
-const PAD_RADIUS: float = 1.0
-const STAND_CLEARANCE: float = 1.0
+const PAD_HEIGHT: float = 0.08
+const PAD_RADIUS: float = 0.55
+const FLOOR_LIFT: float = 0.02
 
 
 func setup(team: Team, floor_position: Vector3, face_target: Vector3) -> void:
@@ -17,10 +17,6 @@ func setup(team: Team, floor_position: Vector3, face_target: Vector3) -> void:
 	_apply_team_visuals(team)
 
 
-func get_stand_position() -> Vector3:
-	return global_position + Vector3(0.0, PAD_HEIGHT + STAND_CLEARANCE, 0.0)
-
-
 func _apply_team_visuals(team: Team) -> void:
 	var ring: MeshInstance3D = get_node_or_null("Ring") as MeshInstance3D
 	var center: MeshInstance3D = get_node_or_null("CenterMark") as MeshInstance3D
@@ -28,11 +24,11 @@ func _apply_team_visuals(team: Team) -> void:
 	var ring_emission: Color
 	match team:
 		Team.PLAYER:
-			glow_color = Color(0.25, 0.75, 0.95)
-			ring_emission = Color(0.2, 0.85, 1.0)
+			glow_color = Color(0.22, 0.62, 0.82)
+			ring_emission = Color(0.18, 0.7, 0.9)
 		Team.ENEMY:
-			glow_color = Color(0.95, 0.42, 0.18)
-			ring_emission = Color(1.0, 0.35, 0.12)
+			glow_color = Color(0.82, 0.32, 0.14)
+			ring_emission = Color(0.9, 0.28, 0.1)
 		_:
 			glow_color = Color(0.5, 0.5, 0.55)
 			ring_emission = Color(0.5, 0.5, 0.55)
@@ -40,10 +36,10 @@ func _apply_team_visuals(team: Team) -> void:
 	if ring and ring.material_override is StandardMaterial3D:
 		var rmat: StandardMaterial3D = (ring.material_override as StandardMaterial3D).duplicate()
 		rmat.emission = ring_emission
-		rmat.emission_energy_multiplier = 1.4
+		rmat.emission_energy_multiplier = 0.75
 		ring.material_override = rmat
 	if center and center.material_override is StandardMaterial3D:
 		var cmat: StandardMaterial3D = (center.material_override as StandardMaterial3D).duplicate()
 		cmat.emission = glow_color
-		cmat.emission_energy_multiplier = 0.9
+		cmat.emission_energy_multiplier = 0.55
 		center.material_override = cmat

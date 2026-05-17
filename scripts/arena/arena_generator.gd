@@ -4,7 +4,10 @@ extends Node3D
 
 const MAX_GENERATION_ATTEMPTS: int = 6
 const SPAWN_RAY_START_HEIGHT: float = 24.0
-const SPAWN_STAND_HEIGHT: float = 1.0
+## Player CharacterBody3D: capsule bottom at body origin (collision offset 0.9, height 1.8).
+const PLAYER_SPAWN_FLOOR_OFFSET: float = 0.02
+## Enemy RigidBody3D: capsule centered on body (height 1.6 → half 0.8).
+const ENEMY_SPAWN_FLOOR_OFFSET: float = 0.8
 const FLOOR_RAY_MASK: int = 1
 const SPAWN_PAD_SCENE: PackedScene = preload("res://scenes/props/spawn_pad.tscn")
 
@@ -119,6 +122,17 @@ func generate_round_arena_async() -> bool:
 		_last_route_cells.clear()
 		_last_route_grid = null
 
+		var wall_set: Dictionary = ArenaWallSetGenerator.apply(
+			_template, template_id
+		)
+		if not wall_set.get("passed", false):
+			print("Wall set invalid, regenerating arena")
+			continue
+		print("Wall set: %s" % wall_set.get("set_name", "?"))
+		print("Cover density: %.2f" % float(wall_set.get("cover_density", 0.0)))
+		print("Route count: %d" % int(wall_set.get("route_count", 0)))
+		print("Generated blockers: %d" % int(wall_set.get("blocker_count", 0)))
+
 		if not _ensure_template_has_route():
 			print("Route invalid after connector, regenerating arena")
 			continue
@@ -140,6 +154,14 @@ func generate_round_arena_async() -> bool:
 	# Last resort: force toxic bridge.
 	_template = ArenaTemplates.get_template(ArenaTemplates.Id.TOXIC_BRIDGE)
 	_route_path_world = PackedVector3Array()
+	var fallback_walls: Dictionary = ArenaWallSetGenerator.apply(
+		_template, ArenaTemplates.Id.TOXIC_BRIDGE
+	)
+	if fallback_walls.get("passed", false):
+		print("Wall set: %s" % fallback_walls.get("set_name", "?"))
+		print("Cover density: %.2f" % float(fallback_walls.get("cover_density", 0.0)))
+		print("Route count: %d" % int(fallback_walls.get("route_count", 0)))
+		print("Generated blockers: %d" % int(fallback_walls.get("blocker_count", 0)))
 	_ensure_template_has_route()
 	ArenaStructureBuilder.build(_active_arena, _template)
 	await get_tree().physics_frame
@@ -325,12 +347,24 @@ func _is_near_fall_opening(local_x: float, local_z: float) -> bool:
 
 
 func _resolve_spawn_on_floor(world_xz: Vector2) -> Variant:
+	var floor_point: Variant = _floor_point_at_xz(world_xz)
+	if floor_point == null:
+		return null
+	return floor_point as Vector3
+
+
+func _floor_point_at_xz(world_xz: Vector2) -> Variant:
 	var hit: Variant = raycast_floor_at(world_xz.x, world_xz.y)
 	if hit == null:
 		return null
 	var hit_dict: Dictionary = hit as Dictionary
 	var floor_point: Vector3 = hit_dict.position as Vector3
-	return Vector3(world_xz.x, floor_point.y + SPAWN_STAND_HEIGHT, world_xz.y)
+	return Vector3(world_xz.x, floor_point.y, world_xz.y)
+
+
+func _fighter_spawn_at_floor(floor_pos: Vector3, is_player: bool) -> Vector3:
+	var body_offset: float = PLAYER_SPAWN_FLOOR_OFFSET if is_player else ENEMY_SPAWN_FLOOR_OFFSET
+	return floor_pos + Vector3.UP * body_offset
 
 
 func _spawn_transform_facing(from_pos: Vector3, look_target: Vector3) -> Transform3D:
@@ -359,33 +393,34 @@ func _place_spawn_pads() -> void:
 	if _spawn_pads == null or _template == null:
 		return
 
-	var player_floor: Vector3 = _floor_point_at(_player_spawn_position)
-	var enemy_floor: Vector3 = _floor_point_at(_enemy_spawn_position)
+	var player_floor: Vector3 = _player_spawn_position
+	var enemy_floor: Vector3 = _enemy_spawn_position
+	var pad_lift: Vector3 = Vector3.UP * SpawnPad.FLOOR_LIFT
 
 	var player_pad: SpawnPad = SPAWN_PAD_SCENE.instantiate() as SpawnPad
 	_spawn_pads.add_child(player_pad)
-	player_pad.setup(SpawnPad.Team.PLAYER, player_floor, _enemy_spawn_position)
+	player_pad.setup(
+		SpawnPad.Team.PLAYER, player_floor + pad_lift, _enemy_spawn_position
+	)
 
 	var enemy_pad: SpawnPad = SPAWN_PAD_SCENE.instantiate() as SpawnPad
 	_spawn_pads.add_child(enemy_pad)
-	enemy_pad.setup(SpawnPad.Team.ENEMY, enemy_floor, _player_spawn_position)
+	enemy_pad.setup(
+		SpawnPad.Team.ENEMY, enemy_floor + pad_lift, _player_spawn_position
+	)
 
-	_player_spawn_position = player_pad.get_stand_position()
-	_enemy_spawn_position = enemy_pad.get_stand_position()
+	print("Spawn pad aligned to floor")
+
+	_player_spawn_position = _fighter_spawn_at_floor(player_floor, true)
+	_enemy_spawn_position = _fighter_spawn_at_floor(enemy_floor, false)
 	_player_spawn_transform = _spawn_transform_facing(
 		_player_spawn_position, _enemy_spawn_position
 	)
 	_enemy_spawn_transform = _spawn_transform_facing(
 		_enemy_spawn_position, _player_spawn_position
 	)
+	print("Spawn transform corrected")
 	print("Spawn pads placed")
-
-
-func _floor_point_at(world_pos: Vector3) -> Vector3:
-	var hit: Variant = raycast_floor_at(world_pos.x, world_pos.z)
-	if hit != null and hit is Dictionary:
-		return (hit as Dictionary).position as Vector3
-	return Vector3(world_pos.x, world_pos.y - SPAWN_STAND_HEIGHT, world_pos.z)
 
 
 func _clear_debug_markers() -> void:

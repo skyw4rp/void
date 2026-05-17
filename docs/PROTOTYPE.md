@@ -41,11 +41,12 @@ Each countdown:
 
 1. **Clear** previous floor (`ActiveArena` children), debris, projectiles, corpses, gibs.
 2. **Pick** a template from `ArenaTemplates` (won’t repeat the same name back-to-back).
-3. **Build** floors + walls + **outer perimeter** (~60–80% protected) + **fall zone markers** (cracked edge, void glow).
-4. **Validate spawns** — raycast down from player/enemy template XZ; require floor hit on layer **1**; place fighters at `floor_y + 1.0`, facing each other.
-5. If invalid → `Spawn invalid, regenerating arena` (up to 6 attempts, then Toxic Bridge fallback).
-6. Spawn **5–9** destructible cover pieces on **raycast-validated** floor points.
-7. Respawn fighters at validated transforms; pass `get_current_arena_bounds()` to AI.
+3. **Wall set** — `ArenaWallSetGenerator` replaces/varies inner `wall_pieces` (zones, archetypes, cover density); route must include a detour.
+4. **Build** floors + walls + **outer perimeter** (~60–80% protected) + **fall zone markers** (cracked edge, void glow).
+5. **Validate spawns** — floor raycast; per-body spawn height (player feet at floor, enemy capsule center +0.8); low-profile spawn pads.
+6. If invalid → regenerate (up to 6 attempts, then Toxic Bridge fallback).
+7. Spawn **5–9** destructible cover pieces on **raycast-validated** floor points.
+8. Respawn fighters at validated transforms; pass `get_current_arena_bounds()` to AI.
 
 ### Arena templates (`scripts/arena/arena_templates.gd`)
 
@@ -95,13 +96,15 @@ Each template: `spawn_safe_half`, `fall_zones[]`, `perimeter.ringout_open_sides`
 
 **Staged destruction** (`wall_destruction.gd`): shotgun/bazooka break walls; **railgun does not** deal wall HP damage. **Railgun pierce marks** (`railgun_pierce_mark.gd`): **entry-only** cyan/purple burn rings on pierced surfaces (**8–12 s** fade, parented to host); exit marks removed (unreliable thickness). No mesh cut. **Beam** shows penetration; brief **impact flash** at each pierce. Real geometry holes postponed. (1) wall damage → crack visual, (2) hold **0.08–0.15 s**, (3) **8–40** chunks, (4) fade host. Floors stay `StructuralFloor_*` only.
 
-**Route validation** (`arena_route_validator.gd`): after template pick, a floor-grid **BFS** checks a walkable path from player spawn to enemy spawn (walls block cells; rocket jump does not count). On failure, `arena_connector_builder.gd` appends a **StructuralFloor** bridge (≥ **4** u wide). Logs: `Route validation passed` or `Route invalid, adding connector`. Optional `debug_show_route` on `ArenaGenerator` draws green path / blue walkable / red blocked.
+**Route validation** (`arena_route_validator.gd`): floor-grid **BFS** from player spawn to enemy spawn; requires primary path **and** at least one detour (main corridor soft-blocked, second path exists). On failure, `arena_connector_builder.gd` appends a **StructuralFloor** bridge (≥ **4** u wide). Optional `debug_show_route` on `ArenaGenerator`.
 
 **Adding a template:** implement a builder in `arena_templates.gd`, add to `get_playable_ids()`, deck top at **local y = 0** (`slab` helper: center y = `-thickness/2`). Every template must have a valid floor route (or accept auto-connector).
 
 ### Debug markers
 
-**Spawn pads** (`spawn_pad.tscn`): Quake-style octagonal platforms at player/enemy spawns — dark metal base, glowing team ring (cyan / orange-red). Fighters spawn on pad tops facing each other. Regenerated each round.
+**Procedural wall sets** (`arena_wall_set_generator.gd`): each round mutates inner `wall_pieces` on top of the selected template — zone-based placement (center, lanes, flanks, spawn approaches), nine destructible archetypes, randomized cover density (**0.4–1.0**), and layout profiles (open center, center blocker, side-heavy, diagonal, long sight, close quarters). Route validator requires a primary path **plus** at least one detour. Signature template walls may be kept (~35%) so arenas stay recognizable.
+
+**Spawn pads** (`spawn_pad.tscn`): low-profile Quake-style spawn markers (small octagonal disk, thin glow ring, dark metal) flush with the floor. Player/enemy transforms raycast to floor height with per-body offsets (player feet at origin, enemy capsule center +0.8) — no stacked pad/stand clearance. Regenerated each round.
 
 `ArenaGenerator.debug_show_spawn_markers` (default **false**): green/red debug spheres above spawns when enabled. `debug_show_markers` (default **false**): blue danger-bound corners / route debug.
 
@@ -149,6 +152,8 @@ Main
 ## AI opponent
 
 `scenes/enemies/arena_opponent.tscn` + `scripts/enemies/arena_opponent.gd`
+
+**Visual:** low-poly humanoid placeholder (`HumanoidVisual`: torso, head, arms, legs, emissive core/eyes, red-orange accents). **Physics:** unchanged capsule `RigidBody3D` (knockback, AI, weapons unchanged). `WeaponPivot` at chest height aims at player.
 
 ### States
 - **ATTACKING** — normal arena fighter behavior

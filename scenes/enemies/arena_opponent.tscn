@@ -1,19 +1,50 @@
-[gd_scene load_steps=6 format=3 uid="uid://carenaopponent01"]
+[gd_scene load_steps=16 format=3 uid="uid://carenaopponent01"]
 
 [ext_resource type="Script" path="res://scripts/enemies/arena_opponent.gd" id="1_script"]
 [ext_resource type="Script" path="res://scripts/combat_stats.gd" id="3_combat_stats"]
 [ext_resource type="PackedScene" uid="uid://cenemyweaponmgr01" path="res://scenes/enemies/enemy_weapon_manager.tscn" id="2_weapons"]
 
-[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_opponent"]
-albedo_color = Color(0.85, 0.15, 0.2, 1)
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_armor"]
+albedo_color = Color(0.11, 0.1, 0.13, 1)
+metallic = 0.42
+roughness = 0.82
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_accent"]
+albedo_color = Color(0.18, 0.06, 0.08, 1)
 emission_enabled = true
-emission = Color(0.45, 0.05, 0.12, 1)
-emission_energy_multiplier = 0.4
+emission = Color(0.95, 0.28, 0.1, 1)
+emission_energy_multiplier = 0.55
 roughness = 0.7
 
-[sub_resource type="CapsuleMesh" id="CapsuleMesh_opponent"]
-radius = 0.45
-height = 1.6
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_glow"]
+albedo_color = Color(0.08, 0.04, 0.05, 1)
+emission_enabled = true
+emission = Color(1, 0.35, 0.12, 1)
+emission_energy_multiplier = 1.35
+shading_mode = 1
+
+[sub_resource type="BoxMesh" id="BoxMesh_body"]
+size = Vector3(0.52, 0.58, 0.3)
+
+[sub_resource type="SphereMesh" id="SphereMesh_head"]
+radius = 0.22
+height = 0.44
+
+[sub_resource type="CapsuleMesh" id="CapsuleMesh_limb"]
+radius = 0.09
+height = 0.42
+
+[sub_resource type="CapsuleMesh" id="CapsuleMesh_leg"]
+radius = 0.11
+height = 0.72
+
+[sub_resource type="SphereMesh" id="SphereMesh_core"]
+radius = 0.07
+height = 0.14
+
+[sub_resource type="SphereMesh" id="SphereMesh_eye"]
+radius = 0.045
+height = 0.09
 
 [sub_resource type="CapsuleShape3D" id="CapsuleShape3D_opponent"]
 radius = 0.45
@@ -32,9 +63,52 @@ danger_half_z = 13.5
 edge_avoid_force = 18.0
 ideal_distance_max = 11.0
 
-[node name="MeshInstance3D" type="MeshInstance3D" parent="."]
-material_override = SubResource("StandardMaterial3D_opponent")
-mesh = SubResource("CapsuleMesh_opponent")
+[node name="HumanoidVisual" type="Node3D" parent="."]
+
+[node name="Body" type="MeshInstance3D" parent="HumanoidVisual"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.36, 0)
+mesh = SubResource("BoxMesh_body")
+material_override = SubResource("StandardMaterial3D_armor")
+
+[node name="CoreGlow" type="MeshInstance3D" parent="HumanoidVisual/Body"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.02, 0.14)
+mesh = SubResource("SphereMesh_core")
+material_override = SubResource("StandardMaterial3D_glow")
+
+[node name="Head" type="MeshInstance3D" parent="HumanoidVisual"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.92, 0)
+mesh = SubResource("SphereMesh_head")
+material_override = SubResource("StandardMaterial3D_armor")
+
+[node name="LeftEye" type="MeshInstance3D" parent="HumanoidVisual/Head"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.09, 0.04, -0.17)
+mesh = SubResource("SphereMesh_eye")
+material_override = SubResource("StandardMaterial3D_glow")
+
+[node name="RightEye" type="MeshInstance3D" parent="HumanoidVisual/Head"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.09, 0.04, -0.17)
+mesh = SubResource("SphereMesh_eye")
+material_override = SubResource("StandardMaterial3D_glow")
+
+[node name="LeftArm" type="MeshInstance3D" parent="HumanoidVisual"]
+transform = Transform3D(0.866025, 0, 0.5, 0, 1, 0, -0.5, 0, 0.866025, -0.34, 0.58, -0.08)
+mesh = SubResource("CapsuleMesh_limb")
+material_override = SubResource("StandardMaterial3D_armor")
+
+[node name="RightArm" type="MeshInstance3D" parent="HumanoidVisual"]
+transform = Transform3D(0.707107, -0.122788, -0.696364, 0, 0.984808, -0.173648, 0.707107, 0.122788, 0.696364, 0.34, 0.58, -0.22)
+mesh = SubResource("CapsuleMesh_limb")
+material_override = SubResource("StandardMaterial3D_accent")
+
+[node name="LeftLeg" type="MeshInstance3D" parent="HumanoidVisual"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.16, -0.46, 0)
+mesh = SubResource("CapsuleMesh_leg")
+material_override = SubResource("StandardMaterial3D_armor")
+
+[node name="RightLeg" type="MeshInstance3D" parent="HumanoidVisual"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.16, -0.46, 0)
+mesh = SubResource("CapsuleMesh_leg")
+material_override = SubResource("StandardMaterial3D_armor")
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="."]
 shape = SubResource("CapsuleShape3D_opponent")
@@ -44,6 +118,6 @@ script = ExtResource("3_combat_stats")
 debug_name = "Enemy"
 
 [node name="WeaponPivot" type="Node3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.35, 0)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.08, 0.72, -0.22)
 
 [node name="EnemyWeaponManager" parent="WeaponPivot" instance=ExtResource("2_weapons")]

@@ -1,59 +1,59 @@
-[gd_scene format=3 uid="uid://drs1y11iogeto"]
+[gd_scene load_steps=7 format=3 uid="uid://drs1y11iogeto"]
 
 [ext_resource type="Script" path="res://scripts/props/spawn_pad.gd" id="1_script"]
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_base"]
-albedo_color = Color(0.1, 0.1, 0.12, 1)
-metallic = 0.35
-roughness = 0.88
+albedo_color = Color(0.09, 0.09, 0.11, 1)
+metallic = 0.38
+roughness = 0.9
 
 [sub_resource type="CylinderMesh" id="CylinderMesh_base"]
-top_radius = 1.0
-bottom_radius = 1.05
-height = 0.2
+top_radius = 0.55
+bottom_radius = 0.55
+height = 0.08
 radial_segments = 8
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_ring"]
-albedo_color = Color(0.06, 0.08, 0.1, 1)
+albedo_color = Color(0.05, 0.06, 0.08, 1)
 emission_enabled = true
 emission = Color(0.2, 0.85, 1, 1)
-emission_energy_multiplier = 1.4
-roughness = 0.75
+emission_energy_multiplier = 0.75
+roughness = 0.8
 shading_mode = 1
 
 [sub_resource type="CylinderMesh" id="CylinderMesh_ring"]
-top_radius = 1.08
-bottom_radius = 1.08
-height = 0.022
+top_radius = 0.62
+bottom_radius = 0.62
+height = 0.008
 radial_segments = 16
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_center"]
 albedo_color = Color(0.04, 0.05, 0.06, 1)
 emission_enabled = true
 emission = Color(0.25, 0.75, 0.95, 1)
-emission_energy_multiplier = 0.9
+emission_energy_multiplier = 0.55
 shading_mode = 1
 
 [sub_resource type="CylinderMesh" id="CylinderMesh_center"]
-top_radius = 0.22
-bottom_radius = 0.22
-height = 0.012
+top_radius = 0.1
+bottom_radius = 0.1
+height = 0.006
 radial_segments = 12
 
 [node name="SpawnPad" type="Node3D"]
 script = ExtResource("1_script")
 
 [node name="Base" type="MeshInstance3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.1, 0)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.04, 0)
 mesh = SubResource("CylinderMesh_base")
 material_override = SubResource("StandardMaterial3D_base")
 
 [node name="Ring" type="MeshInstance3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.21, 0)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.084, 0)
 mesh = SubResource("CylinderMesh_ring")
 material_override = SubResource("StandardMaterial3D_ring")
 
 [node name="CenterMark" type="MeshInstance3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.215, 0)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.087, 0)
 mesh = SubResource("CylinderMesh_center")
 material_override = SubResource("StandardMaterial3D_center")

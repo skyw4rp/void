@@ -40,6 +40,7 @@ enum AiState { ATTACKING, RECOVERING, IN_COVER }
 @export var recovery_duration_min: float = 0.8
 @export var recovery_duration_max: float = 1.2
 
+@onready var _humanoid_visual: Node3D = $HumanoidVisual
 @onready var _weapon_pivot: Node3D = $WeaponPivot
 @onready var _weapons: Node3D = $WeaponPivot/EnemyWeaponManager
 @onready var combat_stats: CombatStats = $CombatStats
@@ -65,9 +66,9 @@ var _arena_walls: Array[Node3D] = []
 var _cover_timer: float = 0.0
 var _cover_duration: float = 0.0
 
-const CORPSE_ALBEDO: Color = Color(0.85, 0.15, 0.2)
+const CORPSE_ALBEDO: Color = Color(0.2, 0.1, 0.12)
 const WALL_GROUP: String = "arena_wall"
-const CORPSE_EMISSION: Color = Color(0.45, 0.05, 0.12)
+const CORPSE_EMISSION: Color = Color(0.55, 0.14, 0.08)
 
 
 func _ready() -> void:
@@ -130,13 +131,11 @@ func _show_live_fighter() -> void:
 
 
 func _set_fighter_meshes_visible(visible: bool) -> void:
-	for child in get_children():
-		if child is MeshInstance3D or child is CollisionShape3D:
-			(child as Node3D).visible = visible
-		elif child is Node3D and child.name != "WeaponPivot":
-			for sub in child.get_children():
-				if sub is MeshInstance3D:
-					(sub as MeshInstance3D).visible = visible
+	if _humanoid_visual:
+		_humanoid_visual.visible = visible
+	var collision: CollisionShape3D = get_node_or_null("CollisionShape3D") as CollisionShape3D
+	if collision:
+		collision.visible = visible
 
 
 func _spawn_death_corpse() -> void:
@@ -170,9 +169,7 @@ func _exit_death_hidden_state() -> void:
 	collision_mask = 1
 	freeze = false
 	gravity_scale = 1.0
-	var body_mesh: MeshInstance3D = get_node_or_null("MeshInstance3D") as MeshInstance3D
-	if body_mesh:
-		body_mesh.visible = true
+	_show_live_fighter()
 	var pivot: Node3D = get_node_or_null("WeaponPivot") as Node3D
 	if pivot:
 		pivot.visible = true
@@ -207,9 +204,7 @@ func get_void_breakup_position() -> Vector3:
 
 
 func hide_for_void_breakup() -> void:
-	var body_mesh: MeshInstance3D = get_node_or_null("MeshInstance3D") as MeshInstance3D
-	if body_mesh:
-		body_mesh.visible = false
+	_set_fighter_meshes_visible(false)
 	var pivot: Node3D = get_node_or_null("WeaponPivot") as Node3D
 	if pivot:
 		pivot.visible = false

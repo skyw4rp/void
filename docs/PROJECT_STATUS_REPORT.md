@@ -159,13 +159,15 @@ Player: `WeaponManager` on camera. Enemy: `EnemyWeaponManager` on weapon pivot.
 
 | Component | Script | Notes |
 |-----------|--------|-------|
-| Inner template walls | `destructible_wall.gd` | All `wall_pieces`; named `DestructibleWall_*` |
+| Inner template walls | `destructible_wall.gd` | `wall_pieces` from template + **`arena_wall_set_generator.gd`** per round |
 | Perimeter | `destructible_wall.gd` | All collision panels; OUTER_HEAVY **200** HP |
 | Round cover | `debris_chunk.gd` | Same damage resolver; avoids main route |
 | Floors | `StructuralFloor_*` / `StructuralConnector_*` | `structural_geometry` group; unique names (no duplicate `StructuralFloor`) |
 | Walls | `DestructibleWall_<Type>_<index>` | `destructible_wall` group; crumble to local rubble |
 
-**Route validation:** `arena_route_validator.gd` BFS on floor grid; connector fallback; spawn clearance **3** cells (~3 m). `debug_show_route` on `ArenaGenerator`.
+**Procedural wall sets:** each match runs `ArenaWallSetGenerator.apply()` before route build — zone placement, nine archetypes (thin slab, half wall, pillar, clusters, barriers, etc.), cover density **0.4–1.0**, layout profiles (open center, side-heavy, long sight, …). ~35% chance to keep signature template walls. Logs: wall set name, cover density, route count, blocker count.
+
+**Route validation:** `arena_route_validator.gd` BFS on floor grid; requires **≥2** viable routes (primary + detour); connector fallback; spawn clearance **3** cells (~3 m). `debug_show_route` on `ArenaGenerator`.
 
 | Wall kind | HP |
 |-----------|-----|
@@ -226,8 +228,10 @@ Break → staged fracture (`wall_destruction.gd`): crack visual → brief hold �
 
 ### Enemy (`arena_opponent.gd`)
 
-- `RigidBody3D`, mass **5**, linear damp **0.6**, axis-locked rotation.
+- **Visual:** simple low-poly humanoid mesh hierarchy (dark armor, red/orange glow accents, emissive eyes/core).
+- **Physics:** `RigidBody3D` + capsule collider unchanged (mass **5**, linear damp **0.6**, axis-locked rotation).
 - Knockback via impulses; recovery state after heavy hits / near edge.
+- Death corpse remains capsule placeholder tinted to match enemy armor/glow.
 
 ### Corpse launch (`physics_corpse.gd`)
 
@@ -409,7 +413,7 @@ These exist on disk but **`main.tscn` does not use them** for gameplay:
 
 ### Debug
 
-- **Spawn pads** (`spawn_pad.gd`): Quake-inspired platforms at spawns; hidden debug spheres by default.
+- **Spawn pads** (`spawn_pad.gd`): low-profile floor-flush Quake markers; per-fighter floor alignment (player +0.02, enemy +0.8); hidden debug spheres by default.
 - `debug_show_spawn_markers` (default **false**): green/red spawn debug only when enabled.
 - `debug_show_markers` (default **false**): danger bounds / route overlays.
 
@@ -679,7 +683,7 @@ neon-catacombs/
 - **Steam** release / demo.
 - Animation on fighters (not just capsules).
 - Expanded gore / void horror direction.
-- Fully **procedural** arena generation beyond fixed templates.
+- Deeper procedural arena generation (geometry/floor shapes beyond fixed templates).
 - Progression, cosmetics, ranked mode (design-dependent).
 
 ---

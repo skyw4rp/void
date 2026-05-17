@@ -31,6 +31,10 @@ static func validate_template(
 	)
 	var passed: bool = not path.is_empty() and spawn_ok
 
+	var route_count: int = 0
+	if passed:
+		route_count = count_viable_routes(grid, start, end, path)
+
 	return {
 		"passed": passed,
 		"grid": grid,
@@ -38,7 +42,20 @@ static func validate_template(
 		"start": start,
 		"end": end,
 		"spawn_ok": spawn_ok,
+		"route_count": route_count,
 	}
+
+
+## Primary path plus at least one detour after soft-blocking the main corridor.
+static func count_viable_routes(
+	grid: GridData, start: Vector2i, end: Vector2i, primary_path: Array
+) -> int:
+	if primary_path.is_empty():
+		return 0
+	var count: int = 1
+	if _has_detour_route(grid, start, end, primary_path):
+		count += 1
+	return count
 
 
 static func path_to_world_points(template: ArenaTemplate, path: Array[Vector2i]) -> PackedVector3Array:
@@ -175,3 +192,32 @@ static func _mark_walkable_near(grid: GridData, origin: Vector2i, radius_cells: 
 			var cell := Vector2i(origin.x + dx, origin.y + dz)
 			if grid.walkable.has(cell):
 				grid.blocked.erase(cell)
+
+
+static func _has_detour_route(
+	grid: GridData, start: Vector2i, end: Vector2i, primary_path: Array
+) -> bool:
+	var detour_grid := GridData.new()
+	detour_grid.walkable = grid.walkable.duplicate()
+	detour_grid.blocked = grid.blocked.duplicate()
+	detour_grid.min_cell = grid.min_cell
+	detour_grid.max_cell = grid.max_cell
+	detour_grid.has_bounds = grid.has_bounds
+
+	var soft_block: Dictionary = {}
+	for cell in primary_path:
+		if cell == start or cell == end:
+			continue
+		if _manhattan_distance(cell, start) <= 2 or _manhattan_distance(cell, end) <= 2:
+			continue
+		soft_block[cell] = true
+
+	for cell in soft_block:
+		if detour_grid.walkable.has(cell):
+			detour_grid.blocked[cell] = true
+
+	return not _bfs(detour_grid, start, end).is_empty()
+
+
+static func _manhattan_distance(a: Vector2i, b: Vector2i) -> int:
+	return absi(a.x - b.x) + absi(a.y - b.y)
