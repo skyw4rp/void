@@ -1,6 +1,8 @@
 # Neon Catacombs — 1v1 Arena Prototype
 
-Godot 4.6 first-person **knock-off duel** on a deadly **suspended bridge** over the void. Win by **ring-out** or by **breaking shield and killing** your opponent.
+Godot 4.6 first-person **knock-off duel** on a deadly **suspended bridge** over a **perceptual horror void**. Win by **ring-out** or by **breaking shield and killing** your opponent.
+
+**Art direction:** see [ART_DIRECTION_VOID.md](ART_DIRECTION_VOID.md) — fear of falling, living abyss, kenophobia, void-as-entity.
 
 ## Game rules
 
@@ -28,7 +30,8 @@ Classic **pit-stage** bridge over a deep void (`scenes/main.tscn`):
 | Walkable deck | **8 × 28** units (long narrow bridge) |
 | Visuals | Dark stone/metal deck, raised trims, low side rails (no walls) |
 | Props | End pillars, broken columns, surface cracks — decorative only |
-| Pit | Dark void plane below, **strong fog**, orange accent lights on edges |
+| Pit | **No visible floor** — `VoidAtmosphere` fog layers, drift particles, abyss observers |
+| Lighting | Cold directional sun, sparse steel rim lights (Quake-like industrial) |
 | Ring-out | Fall below **Y = -20** on any side or end |
 
 Gameplay stays readable: rails warn danger but do **not** block falls.
@@ -137,15 +140,31 @@ When a fighter crosses **void_y** (`-20`):
 
 #### Void death styles (`GameBalance.VoidDeathStyle`)
 
-Change the active style in **`scripts/game_balance.gd`** → `VOID_DEATH_STYLE` (default **DISINTEGRATE**).
+Change the active style in **`scripts/game_balance.gd`** → `VOID_DEATH_STYLE` (default **VOID_GORE**).
 
 | Style | Effect |
 |-------|--------|
 | **DISINTEGRATE** | Blue/green/purple energy burst, expanding ring/sphere, cosmetic shards — no physics chunks |
 | **EXPLODE** | Orange flash + **~10 physics fragments** (`void_fragment.tscn`) that tumble into the void |
 | **GORE_PLACEHOLDER** | Stylized red/dark fragments only (placeholder, not anatomical) |
+| **VOID_GORE** | Full cinematic pit sequence (see below) |
 
-Debug: `Void death style: DISINTEGRATE at …` (etc.).
+Debug: `Void death style: …`, `Void wind`, `Body rupture`, `Disintegration burst`.
+
+#### VOID_GORE cinematic timeline
+
+Fall → freefall → corruption → breakup → burst → **score** → countdown.
+
+| Time | Event |
+|------|--------|
+| **0.0s** | Fall begins; loss of balance / slide; controls off |
+| **0.35s** | Freefall — camera FOV **90→102**, shake ramps |
+| **0.5s** | Ambient void motes; audio: `Void wind` |
+| **1.2s** | Corruption gas cloud (`void_corruption_cloud.tscn`) — green/blue/purple fog, pulsing light |
+| **1.6s** | Body hidden; **6–12** `gore_chunk.tscn` physics chunks + blood mist; debug: `Body rupture` |
+| **2.0s** | Final disintegration burst; **point awarded**; debug: `Disintegration burst` |
+
+Gore is stylized sci-fi corruption (dark red/black chunks), not anatomical. Chunks/effects cleared at round start.
 
 ## Weapons (player)
 
