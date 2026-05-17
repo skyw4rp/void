@@ -85,7 +85,8 @@ func _spawn_death_corpse() -> void:
 		combat_stats.get_corpse_upward_boost(),
 		CORPSE_ALBEDO,
 		CORPSE_EMISSION,
-		"player corpse"
+		"player corpse",
+		combat_stats.last_damage_source
 	)
 
 

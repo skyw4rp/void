@@ -126,7 +126,7 @@ func _run_player_void_death_sequence() -> void:
 	await get_tree().create_timer(VOID_FALL_DELAY_SEC).timeout
 
 	var effect_pos: Vector3 = _fighter_void_effect_position(player)
-	VoidDeathEffect.play_at(get_tree().current_scene, effect_pos)
+	VoidDeathEffect.play_at(get_tree().current_scene, effect_pos, GameBalance.VOID_DEATH_STYLE)
 	if player and player.has_method("end_void_dying"):
 		player.call("end_void_dying")
 
@@ -147,7 +147,7 @@ func _run_enemy_void_death_sequence() -> void:
 	await get_tree().create_timer(VOID_FALL_DELAY_SEC).timeout
 
 	var effect_pos: Vector3 = _fighter_void_effect_position(opponent)
-	VoidDeathEffect.play_at(get_tree().current_scene, effect_pos)
+	VoidDeathEffect.play_at(get_tree().current_scene, effect_pos, GameBalance.VOID_DEATH_STYLE)
 	if opponent and opponent.has_method("end_void_dying"):
 		opponent.call("end_void_dying")
 
@@ -244,6 +244,9 @@ func _clear_corpses() -> void:
 
 func _clear_void_effects() -> void:
 	for node in get_tree().get_nodes_in_group("void_effect"):
+		if node is Node:
+			(node as Node).queue_free()
+	for node in get_tree().get_nodes_in_group("void_fragment"):
 		if node is Node:
 			(node as Node).queue_free()
 

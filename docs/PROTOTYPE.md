@@ -116,12 +116,12 @@ HUD (`arena_ui.gd`): `Player HP: … | Shield: …` and `Enemy HP: … | Shield:
 On **health death** (not void ring-out):
 
 1. Spawn `scenes/effects/physics_corpse.tscn` — a simple **RigidBody3D** capsule (mass **5**, damped spin).
-2. Launch using the last hit’s **direction** and **force** from `CombatStats` (stronger for bazooka / explosion).
+2. Launch using the last hit’s **direction** and **force** from `CombatStats`, with per-weapon scaling on the corpse (`pistol` 0.45, `shotgun` 0.65, `bazooka_direct` 1.0, `bazooka_explosion` 1.1). Horizontal push is strong; upward speed is capped for plausible tumbling.
 3. Hide the live fighter until the round respawns; **no instant respawn** on kill.
 4. After **1.2 s**, award the point and run the normal **3-2-1-FIGHT** countdown.
 5. Corpses are in group **`corpse`** (layer **8**, weapons ignore them); cleared at round start.
 
-Debug: `Spawned player corpse` / `Spawned enemy corpse`, `Corpse launched with force X`.
+Debug: `Spawned player corpse` / `Spawned enemy corpse`, `Corpse final launch velocity: …`.
 
 ### Void death spectacle
 
@@ -129,11 +129,23 @@ When a fighter crosses **void_y** (`-20`):
 
 1. Enter **`void_dying`** — controls/AI off, body keeps falling (**2 s**).
 2. Player: camera falls with body; red void overlay + HUD (`PLAYER LOST TO THE VOID` / `ENEMY LOST TO THE VOID`).
-3. Play `scenes/effects/void_death_effect.tscn` — green/purple energy disintegrate burst (`VOID_DEATH_STYLE = "disintegrate"`).
+3. Play void death VFX at pit position (style from `GameBalance.VOID_DEATH_STYLE` in `scripts/game_balance.gd`).
 4. Award the point, hide the fighter, then normal **3-2-1-FIGHT** countdown.
-5. Void effects cleared at round start (with corpses/projectiles).
+5. Void effects and fragments cleared at round start (with corpses/projectiles).
 
 `GameManager`: `report_player_void_fall()` / `report_enemy_void_fall()` → `finish_player_void_death()` / `finish_enemy_void_death()`.
+
+#### Void death styles (`GameBalance.VoidDeathStyle`)
+
+Change the active style in **`scripts/game_balance.gd`** → `VOID_DEATH_STYLE` (default **DISINTEGRATE**).
+
+| Style | Effect |
+|-------|--------|
+| **DISINTEGRATE** | Blue/green/purple energy burst, expanding ring/sphere, cosmetic shards — no physics chunks |
+| **EXPLODE** | Orange flash + **~10 physics fragments** (`void_fragment.tscn`) that tumble into the void |
+| **GORE_PLACEHOLDER** | Stylized red/dark fragments only (placeholder, not anatomical) |
+
+Debug: `Void death style: DISINTEGRATE at …` (etc.).
 
 ## Weapons (player)
 

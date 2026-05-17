@@ -1,4 +1,4 @@
-[gd_scene format=3 uid="uid://cnpbpwdhhh1ey"]
+[gd_scene load_steps=8 format=3 uid="uid://cnpbpwdhhh1ey"]
 
 [ext_resource type="Script" path="res://scripts/effects/void_death_effect.gd" id="1_script"]
 
@@ -43,13 +43,47 @@ size = Vector3(0.12, 0.12, 0.12)
 [node name="VoidDeathEffect" type="Node3D"]
 script = ExtResource("1_script")
 
-[node name="FlashSphere" type="MeshInstance3D" parent="."]
+[node name="DisintegrateRoot" type="Node3D" parent="."]
+
+[node name="FlashSphere" type="MeshInstance3D" parent="DisintegrateRoot"]
 material_override = SubResource("StandardMaterial3D_flash")
 mesh = SubResource("SphereMesh_flash")
 
-[node name="VoidRing" type="MeshInstance3D" parent="."]
+[node name="VoidRing" type="MeshInstance3D" parent="DisintegrateRoot"]
 material_override = SubResource("StandardMaterial3D_ring")
 mesh = SubResource("TorusMesh_ring")
+
+[node name="FragmentRoot" type="Node3D" parent="DisintegrateRoot"]
+
+[node name="Shard1" type="MeshInstance3D" parent="DisintegrateRoot/FragmentRoot"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.2, 0.1, 0)
+material_override = SubResource("StandardMaterial3D_shard")
+mesh = SubResource("BoxMesh_shard")
+
+[node name="Shard2" type="MeshInstance3D" parent="DisintegrateRoot/FragmentRoot"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.25, 0.15, 0.1)
+material_override = SubResource("StandardMaterial3D_shard")
+mesh = SubResource("BoxMesh_shard")
+
+[node name="Shard3" type="MeshInstance3D" parent="DisintegrateRoot/FragmentRoot"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.05, -0.1, -0.22)
+material_override = SubResource("StandardMaterial3D_shard")
+mesh = SubResource("BoxMesh_shard")
+
+[node name="Shard4" type="MeshInstance3D" parent="DisintegrateRoot/FragmentRoot"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.18, 0.25, -0.12)
+material_override = SubResource("StandardMaterial3D_shard")
+mesh = SubResource("BoxMesh_shard")
+
+[node name="Shard5" type="MeshInstance3D" parent="DisintegrateRoot/FragmentRoot"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.12, -0.05, 0.2)
+material_override = SubResource("StandardMaterial3D_shard")
+mesh = SubResource("BoxMesh_shard")
+
+[node name="Shard6" type="MeshInstance3D" parent="DisintegrateRoot/FragmentRoot"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.28, 0.05, 0.18)
+material_override = SubResource("StandardMaterial3D_shard")
+mesh = SubResource("BoxMesh_shard")
 
 [node name="BurstParticles" type="CPUParticles3D" parent="."]
 emitting = false
@@ -68,35 +102,3 @@ initial_velocity_max = 12.0
 scale_amount_min = 0.08
 scale_amount_max = 0.2
 color = Color(0.4, 1, 0.65, 1)
-
-[node name="FragmentRoot" type="Node3D" parent="."]
-
-[node name="Shard1" type="MeshInstance3D" parent="FragmentRoot"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.2, 0.1, 0)
-material_override = SubResource("StandardMaterial3D_shard")
-mesh = SubResource("BoxMesh_shard")
-
-[node name="Shard2" type="MeshInstance3D" parent="FragmentRoot"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.25, 0.15, 0.1)
-material_override = SubResource("StandardMaterial3D_shard")
-mesh = SubResource("BoxMesh_shard")
-
-[node name="Shard3" type="MeshInstance3D" parent="FragmentRoot"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.05, -0.1, -0.22)
-material_override = SubResource("StandardMaterial3D_shard")
-mesh = SubResource("BoxMesh_shard")
-
-[node name="Shard4" type="MeshInstance3D" parent="FragmentRoot"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.18, 0.25, -0.12)
-material_override = SubResource("StandardMaterial3D_shard")
-mesh = SubResource("BoxMesh_shard")
-
-[node name="Shard5" type="MeshInstance3D" parent="FragmentRoot"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.12, -0.05, 0.2)
-material_override = SubResource("StandardMaterial3D_shard")
-mesh = SubResource("BoxMesh_shard")
-
-[node name="Shard6" type="MeshInstance3D" parent="FragmentRoot"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.28, 0.05, 0.18)
-material_override = SubResource("StandardMaterial3D_shard")
-mesh = SubResource("BoxMesh_shard")

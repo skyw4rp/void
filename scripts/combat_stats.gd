@@ -47,25 +47,19 @@ func record_hit(
 
 
 func get_corpse_launch_force() -> float:
-	var mult: float = 1.0
-	match last_damage_source:
-		"bazooka_explosion":
-			mult = 2.4
-		"bazooka_direct":
-			mult = 1.9
-		"shotgun":
-			mult = 1.25
-		_:
-			mult = 1.1
-	return clampf(last_hit_force * mult, 28.0, 110.0)
+	return clampf(last_hit_force, 12.0, 85.0)
 
 
 func get_corpse_upward_boost() -> float:
-	if last_damage_source == "bazooka_explosion":
-		return 12.0
-	if last_damage_source == "bazooka_direct":
-		return 9.0
-	return 6.0
+	match last_damage_source:
+		"bazooka_explosion":
+			return 8.0
+		"bazooka_direct":
+			return 6.0
+		"shotgun":
+			return 4.0
+		_:
+			return 3.0
 
 
 func apply_damage(amount: int, attacker: Node = null) -> void:

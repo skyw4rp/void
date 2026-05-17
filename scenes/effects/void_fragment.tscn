@@ -1,0 +1,26 @@
+[gd_scene format=3 uid="uid://cnpd3vymhpwey"]
+
+[ext_resource type="Script" path="res://scripts/effects/void_fragment.gd" id="1_script"]
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_frag"]
+albedo_color = Color(0.5, 0.55, 0.6, 1)
+roughness = 0.8
+
+[sub_resource type="BoxMesh" id="BoxMesh_frag"]
+size = Vector3(0.14, 0.14, 0.14)
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_frag"]
+size = Vector3(0.14, 0.14, 0.14)
+
+[node name="VoidFragment" type="RigidBody3D"]
+collision_layer = 8
+collision_mask = 1
+mass = 0.35
+script = ExtResource("1_script")
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="."]
+material_override = SubResource("StandardMaterial3D_frag")
+mesh = SubResource("BoxMesh_frag")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="."]
+shape = SubResource("BoxShape3D_frag")
