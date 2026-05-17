@@ -41,7 +41,7 @@ func _unhandled_input(event: InputEvent) -> void:
 
 
 func get_weapon_name() -> String:
-	return WeaponDefs.get_name(_current)
+	return WeaponDefs.get_weapon_name(_current)
 
 
 func switch_weapon(weapon: WeaponDefs.Id) -> void:
@@ -51,8 +51,8 @@ func switch_weapon(weapon: WeaponDefs.Id) -> void:
 	_pistol_view.visible = weapon == WeaponDefs.Id.PISTOL
 	_shotgun_view.visible = weapon == WeaponDefs.Id.SHOTGUN
 	_bazooka_view.visible = weapon == WeaponDefs.Id.BAZOOKA
-	print("Weapon: %s" % WeaponDefs.get_name(weapon))
-	weapon_changed.emit(WeaponDefs.get_name(weapon))
+	print("Weapon: %s" % WeaponDefs.get_weapon_name(weapon))
+	weapon_changed.emit(WeaponDefs.get_weapon_name(weapon))
 
 
 func try_fire() -> bool:

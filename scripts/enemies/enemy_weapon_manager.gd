@@ -24,7 +24,7 @@ func get_weapon() -> WeaponDefs.Id:
 
 
 func get_weapon_name() -> String:
-	return WeaponDefs.get_name(_current)
+	return WeaponDefs.get_weapon_name(_current)
 
 
 func can_fire() -> bool:
@@ -36,7 +36,7 @@ func switch_weapon(weapon: WeaponDefs.Id) -> void:
 		return
 	_current = weapon
 	_update_viewmodels()
-	print("Enemy switched to %s" % WeaponDefs.get_name(weapon))
+	print("Enemy switched to %s" % WeaponDefs.get_weapon_name(weapon))
 
 
 func try_fire(origin: Vector3, direction: Vector3, aim_basis: Basis) -> bool:
@@ -46,7 +46,7 @@ func try_fire(origin: Vector3, direction: Vector3, aim_basis: Basis) -> bool:
 	_cooldown_remaining = WeaponFiring.fire(
 		_current, origin, direction, aim_basis, get_tree().current_scene, spawn_forward_offset
 	)
-	print("Enemy fired %s" % WeaponDefs.get_name(_current))
+	print("Enemy fired %s" % WeaponDefs.get_weapon_name(_current))
 	return true
 
 

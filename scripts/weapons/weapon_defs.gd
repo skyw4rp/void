@@ -44,5 +44,5 @@ static func get_data(weapon: Id) -> Dictionary:
 	return STATS[weapon]
 
 
-static func get_name(weapon: Id) -> String:
+static func get_weapon_name(weapon: Id) -> String:
 	return NAMES[weapon]
