@@ -1,108 +1,50 @@
 # Retro FPS Prototype
 
-Godot 4 first-person prototype with WASD movement, mouse look, jump, sprint, and gravity. The main scene is tuned for a **dark, Quake-like floating platform** above a void.
+Godot 4 first-person prototype with WASD movement, mouse look, jump, sprint, gravity, and a **multi-weapon push system** on a dark floating platform.
 
 ## Scene hierarchy
 
 ```
 Main (Node3D)
-├── WorldEnvironment     — void sky, low ambient, subtle fog
-├── SunLight             — DirectionalLight3D (key sun)
-├── Floor                — walkable platform (dark material)
-│   └── StaticBody3D / CollisionShape3D
-├── PlatformBorder       — thin rim meshes on four sides
-├── TestCube             — shadow / lighting reference prop
-├── PushBox1 / PushBox2 / PushBox3 — pushable `RigidBody3D` cubes
-├── Enemy1 / Enemy2 / Enemy3       — `scenes/enemies/push_enemy.tscn`
-└── Player               — `scripts/player.gd` (group: `player`)
+├── WorldEnvironment / SunLight
+├── Floor + PlatformBorder
+├── TestCube
+├── PushBox1–3
+├── Enemy1–3
+├── UI / WeaponLabel          — current weapon HUD
+└── Player (group: player)
     ├── Camera3D
-    │   └── PushWeapon   — `scripts/push_weapon.gd` (spawns push projectile)
+    │   └── WeaponManager     — `scenes/weapons/weapon_manager.tscn`
     └── CollisionShape3D
 ```
 
-## Lighting setup
+## Weapons
 
-### SunLight (`DirectionalLight3D`)
+Managed by `scripts/weapons/weapon_manager.gd` on the camera. Three viewmodels (only one visible at a time): gray **Pistol**, brown **Shotgun**, orange **Bazooka**.
 
-Single harsh key light, similar to outdoor Quake maps:
+| Key | Weapon | Fire rate | Behavior |
+|-----|--------|-----------|----------|
+| **1** | Pistol | Fast (0.15s) | Single small fast projectile, low push (8) |
+| **2** | Shotgun | Slow (0.75s) | 7 pellets with spread, medium push (14) |
+| **3** | Bazooka | Slowest (1.25s) | Large slow rocket; direct hit + **explosion** (radius 5, force 35) |
 
-| Property | Value | Notes |
-|----------|-------|--------|
-| `light_energy` | `3.0` | Strong enough to read the platform; rest of the scene stays dark |
-| `light_negative` | `false` | Normal additive lighting (default) |
-| `shadow_enabled` | `true` | Platform, TestCube, and player cast readable shadows |
-| Rotation (degrees) | X `-60`, Y `0`, Z `0` | Angled sun; shallow shadows across the floor |
+**Left click** fires the active weapon (mouse must be captured). Switching weapons prints `Weapon: <name>` to the Output. HUD label shows `Weapon: Pistol` etc.
 
-The light is placed high above the play area so its direction matches a late-afternoon sun.
+### Projectiles
 
-### WorldEnvironment
+- `scenes/weapons/push_projectile.tscn` — pistol & shotgun pellets (`scripts/weapons/push_projectile.gd`)
+- `scenes/weapons/bazooka_projectile.tscn` — large red sphere (`scripts/weapons/bazooka_projectile.gd`)
+- `scripts/weapons/push_explosion.gd` — sphere overlap query, outward impulse on `RigidBody3D`, debug prints
 
-Configured on the `Environment` resource attached to `WorldEnvironment`:
-
-| Setting | Purpose |
-|---------|---------|
-| `background_mode = Color` | Solid void instead of a skybox |
-| `background_color` | Near-black blue `(0.015, 0.02, 0.045)` — reads as empty space below the platform |
-| `ambient_light_source = Color` | Low fill so unlit faces are not pure black |
-| `ambient_light_energy = 0.25` | Subtle; does not flatten the sun contrast |
-| `fog_enabled` | `true` |
-| `fog_mode = Exponential` | Simple distance fade into the void |
-| `fog_density = 0.018` | Gentle; distant edges soften without hiding the platform |
-
-Together, dark background + fog + low ambient make the **20×20 floor** feel like a slab floating over nothing. Look over the **PlatformBorder** rim or jump off the edge to sell the void.
-
-### Platform materials
-
-- **Floor** — dark gray-brown `StandardMaterial3D`, high roughness (stone-like top).
-- **PlatformBorder** — four thin box strips along the perimeter, darker than the floor, slightly raised for a visible edge. No walls.
-
-### TestCube
-
-`MeshInstance3D` at `(0, 1, -5)`, scale `(1, 2, 1)`, neutral tan material. Use it to check sun angle, shadow direction, and fog falloff when tuning the scene.
-
-## Push weapon
-
-`PushWeapon` is a small viewmodel mesh parented to `Camera3D` (lower-right of the view). `scripts/push_weapon.gd` spawns `scenes/weapons/push_projectile.tscn` on **shoot**:
-
-| Setting | Default | Description |
-|---------|---------|-------------|
-| `fire_cooldown` | `0.25` | Minimum seconds between shots |
-| `spawn_forward_offset` | `0.6` | Spawn distance in front of the camera |
-
-Projectile scene: `scenes/weapons/push_projectile.tscn` (`Area3D` + sphere mesh). Script `scripts/push_projectile.gd`:
-
-| Setting | Default | Description |
-|---------|---------|-------------|
-| `speed` | `35` | Forward travel speed |
-| `lifetime` | `3` | Auto-despawn after seconds |
-| `push_force` | `18` | Impulse on `RigidBody3D` hit |
-
-The projectile moves along the camera look direction. On **RigidBody3D** contact it applies an impulse in its travel direction, prints debug info, and is destroyed. Any other body destroys it without pushing. No damage.
-
-**PushBox1–3** are colored 1 m cubes on the platform ahead of spawn for testing pushes.
+All weapons push **PushBox** crates and **PushEnemy** capsules (no damage). Enemies chase the player; void fall removes them.
 
 ## Push enemies
 
-Scene: `scenes/enemies/push_enemy.tscn` (`RigidBody3D` + magenta capsule). Script: `scripts/push_enemy.gd`.
-
-| Setting | Default | Description |
-|---------|---------|-------------|
-| `move_force` | `8` | Central force toward the player |
-| `max_speed` | `4` | Horizontal speed cap |
-| `void_y` | `-20` | Y threshold for void removal |
-| `respawn_on_void` | `false` | Reserved for future respawn waves |
-
-Enemies **chase the player** on the platform (horizontal force via group `player`). They are full `RigidBody3D` bodies, so **push projectiles** knock them like the crates — no damage yet. Shoot them toward the rim and into the void; when **Y < -20** the enemy prints `Enemy fell into the void` and is removed with `queue_free()`.
-
-Main scene spawns **Enemy1–3** at `(0, 1, -8)`, `(-4, 1, -7)`, and `(4, 1, -7)`.
+Scene: `scenes/enemies/push_enemy.tscn`. Chase via group `player`. Removed at Y &lt; -20 with `Enemy fell into the void`.
 
 ## Void death and respawn
 
-On start, the player stores their initial position as the respawn point. If **Y** drops below **-20** (fallen into the void), they are teleported back to that spawn, velocity is cleared, and the Output prints:
-
-`Player fell into the void. Respawning.`
-
-Walk off the platform edge to test. A placeholder comment in `scripts/player.gd` marks where camera shake or a screen flash can be added later.
+Player respawns at start position below Y = -20. Message: `Player fell into the void. Respawning.`
 
 ## Controls
 
@@ -112,16 +54,24 @@ Walk off the platform edge to test. A placeholder comment in `scripts/player.gd`
 | Mouse | Look (when captured) |
 | Space | Jump |
 | Shift | Sprint |
-| Left click | Fire push projectile (when mouse captured) |
+| **1 / 2 / 3** | Pistol / Shotgun / Bazooka |
+| **Left click** | Fire weapon (when mouse captured) |
 | Esc | Release mouse |
 | Left click | Re-capture mouse (when cursor visible) |
 
 ## Run
 
-Open the project in Godot 4.6+ and press **F5**. Main scene: `res://scenes/main.tscn`.
+Open in Godot 4.6+ and press **F5**. Main scene: `res://scenes/main.tscn`.
+
+## File layout
+
+```
+scripts/weapons/   weapon_manager, push_projectile, bazooka_projectile, push_explosion, weapon_hud
+scenes/weapons/    weapon_manager, push_projectile, bazooka_projectile
+```
 
 ## Tuning tips
 
-- Increase `fog_density` slightly if the void still feels too “empty room.”
-- Lower `ambient_light_energy` for more contrast; raise it if gameplay areas are too hard to read.
-- Adjust `SunLight` `light_energy` or rotation in small steps — large changes quickly break the retro look.
+- Weapon stats live in `weapon_manager.gd` `_stats` dictionary.
+- Bazooka explosion: `explosion_radius` / `explosion_force` on `bazooka_projectile.tscn`.
+- Adjust `fog_density` or `SunLight` energy for atmosphere.

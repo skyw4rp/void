@@ -1,0 +1,41 @@
+[gd_scene format=3 uid="uid://4stks8flxun5"]
+
+[ext_resource type="Script" path="res://scripts/weapons/weapon_manager.gd" id="1_manager"]
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_pistol"]
+albedo_color = Color(0.55, 0.58, 0.65, 1)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_shotgun"]
+albedo_color = Color(0.45, 0.35, 0.22, 1)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_bazooka"]
+albedo_color = Color(0.55, 0.28, 0.18, 1)
+
+[sub_resource type="BoxMesh" id="BoxMesh_pistol"]
+size = Vector3(0.08, 0.1, 0.28)
+
+[sub_resource type="BoxMesh" id="BoxMesh_shotgun"]
+size = Vector3(0.1, 0.12, 0.42)
+
+[sub_resource type="BoxMesh" id="BoxMesh_bazooka"]
+size = Vector3(0.14, 0.14, 0.55)
+
+[node name="WeaponManager" type="Node3D"]
+script = ExtResource("1_manager")
+
+[node name="PistolView" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.4, -0.3, -0.5)
+material_override = SubResource("StandardMaterial3D_pistol")
+mesh = SubResource("BoxMesh_pistol")
+
+[node name="ShotgunView" type="MeshInstance3D" parent="."]
+visible = false
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.42, -0.32, -0.58)
+material_override = SubResource("StandardMaterial3D_shotgun")
+mesh = SubResource("BoxMesh_shotgun")
+
+[node name="BazookaView" type="MeshInstance3D" parent="."]
+visible = false
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.44, -0.28, -0.68)
+material_override = SubResource("StandardMaterial3D_bazooka")
+mesh = SubResource("BoxMesh_bazooka")

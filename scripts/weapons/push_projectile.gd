@@ -1,4 +1,4 @@
-## Visible push projectile — flies forward, impulses RigidBody3D targets, then despawns.
+## Standard push projectile — flies forward and impulses RigidBody3D on contact.
 extends Area3D
 
 @export var speed: float = 35.0
@@ -15,11 +15,24 @@ func _ready() -> void:
 	get_tree().create_timer(lifetime).timeout.connect(_despawn)
 
 
-## Call immediately after spawning to set origin and travel direction.
 func launch(from: Vector3, direction: Vector3) -> void:
 	global_position = from
 	_direction = direction.normalized()
 	_launched = true
+
+
+func configure(stats: Dictionary) -> void:
+	speed = stats.get("speed", speed)
+	push_force = stats.get("push_force", push_force)
+	lifetime = stats.get("lifetime", lifetime)
+	var mesh: MeshInstance3D = get_node_or_null("MeshInstance3D") as MeshInstance3D
+	if mesh and stats.has("mesh_scale"):
+		var s := float(stats.mesh_scale)
+		mesh.scale = Vector3.ONE * s
+	if mesh and stats.has("color"):
+		var mat: StandardMaterial3D = mesh.material_override.duplicate() as StandardMaterial3D
+		mat.albedo_color = stats.color
+		mesh.material_override = mat
 
 
 func _physics_process(delta: float) -> void:
@@ -36,8 +49,8 @@ func _on_body_entered(body: Node3D) -> void:
 		var offset := global_position - rigid.global_position
 		rigid.apply_impulse(_direction * push_force, offset)
 		print(
-			"Projectile: pushed RigidBody3D '%s' (force=%.1f, dir=%s)"
-			% [rigid.name, push_force, _direction]
+			"Projectile: pushed '%s' (force=%.1f)"
+			% [rigid.name, push_force]
 		)
 	else:
 		print("Projectile: hit '%s' — destroyed" % body.name)
