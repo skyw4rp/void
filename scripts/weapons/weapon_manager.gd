@@ -1,14 +1,7 @@
-## Manages weapon switching, viewmodels, and firing for pistol / shotgun / bazooka.
+## Player weapon switching, viewmodels, and firing (uses shared WeaponDefs / WeaponFiring).
 extends Node3D
 
 signal weapon_changed(weapon_name: String)
-
-enum Weapon { PISTOL, SHOTGUN, BAZOOKA }
-
-const PROJECTILE_SCENE: PackedScene = preload("res://scenes/weapons/push_projectile.tscn")
-const BAZOOKA_PROJECTILE_SCENE: PackedScene = preload("res://scenes/weapons/bazooka_projectile.tscn")
-
-const WEAPON_NAMES: Array[String] = ["Pistol", "Shotgun", "Bazooka"]
 
 @export var spawn_forward_offset: float = 0.6
 
@@ -17,47 +10,13 @@ const WEAPON_NAMES: Array[String] = ["Pistol", "Shotgun", "Bazooka"]
 @onready var _shotgun_view: Node3D = $ShotgunView
 @onready var _bazooka_view: Node3D = $BazookaView
 
-var _current: Weapon = Weapon.PISTOL
+var _current: WeaponDefs.Id = WeaponDefs.Id.PISTOL
 var _cooldown_remaining: float = 0.0
-
-## Per-weapon tuning: cooldown, projectile stats, pellet count, spread (radians).
-var _stats: Dictionary = {
-	Weapon.PISTOL: {
-		"cooldown": 0.15,
-		"pellets": 1,
-		"spread": 0.0,
-		"projectile": {
-			"speed": 50.0,
-			"push_force": 8.0,
-			"lifetime": 2.5,
-			"mesh_scale": 0.08,
-			"color": Color(0.75, 0.85, 1.0),
-		},
-	},
-	Weapon.SHOTGUN: {
-		"cooldown": 0.75,
-		"pellets": 7,
-		"spread": 0.14,
-		"projectile": {
-			"speed": 38.0,
-			"push_force": 14.0,
-			"lifetime": 1.8,
-			"mesh_scale": 0.07,
-			"color": Color(1.0, 0.75, 0.35),
-		},
-	},
-	Weapon.BAZOOKA: {
-		"cooldown": 1.25,
-		"pellets": 1,
-		"spread": 0.0,
-		"use_bazooka_scene": true,
-	},
-}
 
 
 func _ready() -> void:
 	add_to_group("weapon_manager")
-	_switch_weapon(Weapon.PISTOL)
+	switch_weapon(WeaponDefs.Id.PISTOL)
 
 
 func _physics_process(delta: float) -> void:
@@ -65,67 +24,50 @@ func _physics_process(delta: float) -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
+	var game_manager := get_tree().get_first_node_in_group("game_manager")
+	if game_manager and not game_manager.is_round_active():
+		return
+
 	if event.is_action_pressed("weapon_1"):
-		_switch_weapon(Weapon.PISTOL)
+		switch_weapon(WeaponDefs.Id.PISTOL)
 	elif event.is_action_pressed("weapon_2"):
-		_switch_weapon(Weapon.SHOTGUN)
+		switch_weapon(WeaponDefs.Id.SHOTGUN)
 	elif event.is_action_pressed("weapon_3"):
-		_switch_weapon(Weapon.BAZOOKA)
+		switch_weapon(WeaponDefs.Id.BAZOOKA)
 	elif event.is_action_pressed("shoot"):
 		if Input.get_mouse_mode() != Input.MOUSE_MODE_CAPTURED:
 			return
-		if _cooldown_remaining > 0.0:
-			return
-		_fire_current_weapon()
+		try_fire()
 
 
 func get_weapon_name() -> String:
-	return WEAPON_NAMES[_current]
+	return WeaponDefs.get_name(_current)
 
 
-func _switch_weapon(weapon: Weapon) -> void:
+func switch_weapon(weapon: WeaponDefs.Id) -> void:
+	if _current == weapon:
+		return
 	_current = weapon
-	_pistol_view.visible = weapon == Weapon.PISTOL
-	_shotgun_view.visible = weapon == Weapon.SHOTGUN
-	_bazooka_view.visible = weapon == Weapon.BAZOOKA
-	print("Weapon: %s" % WEAPON_NAMES[weapon])
-	weapon_changed.emit(WEAPON_NAMES[weapon])
+	_pistol_view.visible = weapon == WeaponDefs.Id.PISTOL
+	_shotgun_view.visible = weapon == WeaponDefs.Id.SHOTGUN
+	_bazooka_view.visible = weapon == WeaponDefs.Id.BAZOOKA
+	print("Weapon: %s" % WeaponDefs.get_name(weapon))
+	weapon_changed.emit(WeaponDefs.get_name(weapon))
 
 
-func _fire_current_weapon() -> void:
-	var data: Dictionary = _stats[_current]
-	_cooldown_remaining = data.cooldown
+func try_fire() -> bool:
+	if _cooldown_remaining > 0.0:
+		return false
 
 	var base_dir := -_camera.global_transform.basis.z.normalized()
-	var spawn_pos := _camera.global_position + base_dir * spawn_forward_offset
-	var pellets: int = data.pellets
+	var origin := _camera.global_position
+	var aim_basis := _camera.global_transform.basis
 
-	if data.get("use_bazooka_scene", false):
-		_spawn_bazooka(spawn_pos, base_dir)
-		return
-
-	for i in pellets:
-		var dir := _apply_spread(base_dir, data.spread)
-		_spawn_standard_projectile(spawn_pos, dir, data.projectile)
+	_cooldown_remaining = WeaponFiring.fire(
+		_current, origin, base_dir, aim_basis, get_tree().current_scene, spawn_forward_offset
+	)
+	return true
 
 
-func _apply_spread(direction: Vector3, spread: float) -> Vector3:
-	if spread <= 0.0:
-		return direction
-	var cam_basis := _camera.global_transform.basis
-	var offset := cam_basis.x * randf_range(-spread, spread)
-	offset += cam_basis.y * randf_range(-spread, spread)
-	return (direction + offset).normalized()
-
-
-func _spawn_standard_projectile(from: Vector3, direction: Vector3, stats: Dictionary) -> void:
-	var projectile: Area3D = PROJECTILE_SCENE.instantiate() as Area3D
-	get_tree().current_scene.add_child(projectile)
-	projectile.configure(stats)
-	projectile.launch(from, direction)
-
-
-func _spawn_bazooka(from: Vector3, direction: Vector3) -> void:
-	var projectile: Area3D = BAZOOKA_PROJECTILE_SCENE.instantiate() as Area3D
-	get_tree().current_scene.add_child(projectile)
-	projectile.launch(from, direction)
+func can_fire() -> bool:
+	return _cooldown_remaining <= 0.0

@@ -1,41 +1,47 @@
-## First-person CharacterBody3D controller for the retro FPS prototype.
-## Handles WASD movement, mouse look, jump, sprint, gravity, and mouse capture.
+## First-person CharacterBody3D controller for the 1v1 arena prototype.
 extends CharacterBody3D
 
-# --- Movement tuning ---
 const WALK_SPEED: float = 5.0
 const SPRINT_SPEED: float = 9.0
 const JUMP_VELOCITY: float = 4.5
 const MOUSE_SENSITIVITY: float = 0.002
 
-# Vertical look clamp (radians)
 const LOOK_PITCH_MIN: float = -1.4
 const LOOK_PITCH_MAX: float = 1.4
 
-## Y threshold below the platform — player respawns when they fall past this height.
-const VOID_DEATH_Y: float = -20.0
-
 @onready var camera: Camera3D = $Camera3D
 
-## Uses the project default gravity unless overridden in Project Settings.
 var _gravity: float = ProjectSettings.get_setting("physics/3d/default_gravity")
 var _spawn_position: Vector3 = Vector3.ZERO
+var _void_y: float = -20.0
+var _void_reported: bool = false
+var _game_manager: Node
 
 
 func _ready() -> void:
 	add_to_group("player")
-	_spawn_position = global_position
-	# Start with the mouse captured for FPS controls.
+	_game_manager = get_tree().get_first_node_in_group("game_manager")
+	if _game_manager:
+		_void_y = _game_manager.get_void_y()
+		_spawn_position = _game_manager.get_player_spawn()
+	else:
+		_spawn_position = global_position
 	Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
 
 
+func arena_respawn(spawn_position: Vector3) -> void:
+	_spawn_position = spawn_position
+	global_position = spawn_position
+	velocity = Vector3.ZERO
+	_void_reported = false
+	# TODO: camera shake or screen flash on respawn.
+
+
 func _unhandled_input(event: InputEvent) -> void:
-	# ESC releases the mouse so menus or the OS cursor are usable.
 	if event.is_action_pressed("ui_cancel"):
 		Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
 		return
 
-	# Re-capture mouse with shoot click only while the cursor is free (push uses shoot when captured).
 	if event.is_action_pressed("shoot") and Input.get_mouse_mode() == Input.MOUSE_MODE_VISIBLE:
 		Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
 
@@ -43,22 +49,23 @@ func _unhandled_input(event: InputEvent) -> void:
 		if Input.get_mouse_mode() != Input.MOUSE_MODE_CAPTURED:
 			return
 		var motion := event as InputEventMouseMotion
-		# Yaw on the body; pitch on the camera only.
 		rotate_y(-motion.relative.x * MOUSE_SENSITIVITY)
 		camera.rotate_x(-motion.relative.y * MOUSE_SENSITIVITY)
 		camera.rotation.x = clampf(camera.rotation.x, LOOK_PITCH_MIN, LOOK_PITCH_MAX)
 
 
 func _physics_process(delta: float) -> void:
-	# Apply gravity when airborne.
+	if _game_manager and not _game_manager.is_round_active():
+		velocity = Vector3.ZERO
+		move_and_slide()
+		return
+
 	if not is_on_floor():
 		velocity.y -= _gravity * delta
 
-	# Jump on Space while grounded.
 	if Input.is_action_just_pressed("jump") and is_on_floor():
 		velocity.y = JUMP_VELOCITY
 
-	# Build a horizontal move vector from WASD (camera-relative).
 	var input_dir := Input.get_vector("move_left", "move_right", "move_forward", "move_back")
 	var direction := (transform.basis * Vector3(input_dir.x, 0.0, input_dir.y)).normalized()
 
@@ -72,12 +79,13 @@ func _physics_process(delta: float) -> void:
 
 	move_and_slide()
 
-	if global_position.y < VOID_DEATH_Y:
-		_respawn_from_void()
+	if global_position.y < _void_y:
+		_report_void_fall()
 
 
-func _respawn_from_void() -> void:
-	print("Player fell into the void. Respawning.")
-	global_position = _spawn_position
-	velocity = Vector3.ZERO
-	# TODO: Add camera shake or brief screen flash VFX here.
+func _report_void_fall() -> void:
+	if _void_reported:
+		return
+	_void_reported = true
+	if _game_manager and _game_manager.has_method("report_player_fell"):
+		_game_manager.report_player_fell()

@@ -1,77 +1,89 @@
-# Retro FPS Prototype
+# Neon Catacombs — 1v1 Arena Prototype
 
-Godot 4 first-person prototype with WASD movement, mouse look, jump, sprint, gravity, and a **multi-weapon push system** on a dark floating platform.
+Godot 4.6 first-person **knock-off duel** on a floating platform. No health — knock your opponent into the void to score.
+
+## Game rules
+
+| Rule | Detail |
+|------|--------|
+| Mode | Player vs **one AI opponent** |
+| Win | First to **5 points** |
+| Point | Opponent falls below **Y = -20** |
+| After point | Both respawn at spawn points, velocities cleared (~0.35s delay) |
+| Loss | You fall → enemy +1 (`Enemy scored!`) |
+| Score | You knock AI off → player +1 (`Player scored!`) |
+
+Spawns: **Player** south `(0, 1.1, 7)`, **Enemy** north `(0, 1, -7)`.
 
 ## Scene hierarchy
 
 ```
-Main (Node3D)
-├── WorldEnvironment / SunLight
+Main
+├── GameManager          — scoring, respawns, match end
+│   └── SpawnPoints (PlayerSpawn, EnemySpawn)
 ├── Floor + PlatformBorder
-├── TestCube
-├── PushBox1–3
-├── Enemy1–3
-├── UI / WeaponLabel          — current weapon HUD
-└── Player (group: player)
-    ├── Camera3D
-    │   └── WeaponManager     — `scenes/weapons/weapon_manager.tscn`
-    └── CollisionShape3D
+├── PushBox1             — optional center cover crate
+├── ArenaOpponent        — AI duelist
+├── Player
+│   └── Camera3D / WeaponManager
+└── UI                   — weapon, score, win/lose
 ```
 
-## Weapons
+## AI opponent
 
-Managed by `scripts/weapons/weapon_manager.gd` on the camera. Three viewmodels (only one visible at a time): gray **Pistol**, brown **Shotgun**, orange **Bazooka**.
+`scenes/enemies/arena_opponent.tscn` + `scripts/enemies/arena_opponent.gd`
 
-| Key | Weapon | Fire rate | Behavior |
-|-----|--------|-----------|----------|
-| **1** | Pistol | Fast (0.15s) | Single small fast projectile, low push (8) |
-| **2** | Shotgun | Slow (0.75s) | 7 pellets with spread, medium push (14) |
-| **3** | Bazooka | Slowest (1.25s) | Large slow rocket; direct hit + **explosion** (radius 5, force 35) |
+- **Same weapons as the player** (Pistol / Shotgun / Bazooka) via shared `WeaponDefs` + `WeaponFiring`
+- Visible enemy weapon models on `WeaponPivot` (`enemy_weapon_manager.tscn`)
+- Movement: approach, retreat when too close, strafe at mid range
+- **Range picks:** shotgun close (&lt; 5 m), bazooka medium (&lt; 12 m), pistol long
+- Random weapon swap every **4–6 s** (debug: `Enemy switched to …`)
+- Fires on cooldown with debug: `Enemy fired …`
+- Pushed into void → player scores; respawns with you
 
-**Left click** fires the active weapon (mouse must be captured). Switching weapons prints `Weapon: <name>` to the Output. HUD label shows `Weapon: Pistol` etc.
+## Weapons (player)
 
-### Projectiles
+| Key | Weapon |
+|-----|--------|
+| **1** | Pistol — fast, light push |
+| **2** | Shotgun — pellet spread |
+| **3** | Bazooka — slow rocket + explosion push |
+| **Left click** | Fire |
 
-- `scenes/weapons/push_projectile.tscn` — pistol & shotgun pellets (`scripts/weapons/push_projectile.gd`)
-- `scenes/weapons/bazooka_projectile.tscn` — large red sphere (`scripts/weapons/bazooka_projectile.gd`)
-- `scripts/weapons/push_explosion.gd` — sphere overlap query, outward impulse on `RigidBody3D`, debug prints
+Push projectiles affect the AI, crates, and physics objects. No damage.
 
-All weapons push **PushBox** crates and **PushEnemy** capsules (no damage). Enemies chase the player; void fall removes them.
+## HUD
 
-## Push enemies
-
-Scene: `scenes/enemies/push_enemy.tscn`. Chase via group `player`. Removed at Y &lt; -20 with `Enemy fell into the void`.
-
-## Void death and respawn
-
-Player respawns at start position below Y = -20. Message: `Player fell into the void. Respawning.`
+- Top: `Player: 0 | Enemy: 0`
+- Bottom: `Weapon: …`
+- Center (on win): `You Win!` or `You Lose!`
 
 ## Controls
 
 | Input | Action |
 |-------|--------|
-| W / A / S / D | Move |
-| Mouse | Look (when captured) |
+| WASD | Move |
+| Mouse | Look |
 | Space | Jump |
 | Shift | Sprint |
-| **1 / 2 / 3** | Pistol / Shotgun / Bazooka |
-| **Left click** | Fire weapon (when mouse captured) |
+| 1 / 2 / 3 | Weapons |
+| Left click | Fire |
 | Esc | Release mouse |
-| Left click | Re-capture mouse (when cursor visible) |
+| Left click (cursor free) | Re-capture mouse |
 
 ## Run
 
-Open in Godot 4.6+ and press **F5**. Main scene: `res://scenes/main.tscn`.
+Godot 4.6+ → **F5** → `res://scenes/main.tscn`
 
-## File layout
+## Key scripts
 
 ```
-scripts/weapons/   weapon_manager, push_projectile, bazooka_projectile, push_explosion, weapon_hud
-scenes/weapons/    weapon_manager, push_projectile, bazooka_projectile
+scripts/game_manager.gd
+scripts/enemies/arena_opponent.gd
+scripts/enemies/enemy_weapon_manager.gd
+scripts/arena_ui.gd
+scripts/player.gd
+scripts/weapons/weapon_defs.gd
+scripts/weapons/weapon_firing.gd
+scripts/weapons/weapon_manager.gd
 ```
-
-## Tuning tips
-
-- Weapon stats live in `weapon_manager.gd` `_stats` dictionary.
-- Bazooka explosion: `explosion_radius` / `explosion_force` on `bazooka_projectile.tscn`.
-- Adjust `fog_density` or `SunLight` energy for atmosphere.

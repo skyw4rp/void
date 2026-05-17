@@ -1,9 +1,10 @@
-[gd_scene load_steps=16 format=3 uid="uid://by2p5hp8kwv2f"]
+[gd_scene load_steps=13 format=3 uid="uid://by2p5hp8kwv2f"]
 
 [ext_resource type="Script" path="res://scripts/player.gd" id="1_player"]
 [ext_resource type="PackedScene" uid="uid://cweaponmanager01" path="res://scenes/weapons/weapon_manager.tscn" id="2_weapon_manager"]
-[ext_resource type="Script" path="res://scripts/weapons/weapon_hud.gd" id="3_weapon_hud"]
-[ext_resource type="PackedScene" uid="uid://bpushenemyscene01" path="res://scenes/enemies/push_enemy.tscn" id="4_push_enemy"]
+[ext_resource type="Script" path="res://scripts/game_manager.gd" id="3_game_manager"]
+[ext_resource type="Script" path="res://scripts/arena_ui.gd" id="4_arena_ui"]
+[ext_resource type="PackedScene" uid="uid://carenaopponent01" path="res://scenes/enemies/arena_opponent.tscn" id="5_arena_opponent"]
 
 [sub_resource type="Environment" id="Environment_void"]
 background_mode = 1
@@ -25,20 +26,8 @@ roughness = 0.92
 albedo_color = Color(0.08, 0.075, 0.09, 1)
 roughness = 0.95
 
-[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_testcube"]
-albedo_color = Color(0.45, 0.42, 0.38, 1)
-roughness = 0.85
-
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_pushbox1"]
 albedo_color = Color(0.62, 0.22, 0.18, 1)
-roughness = 0.75
-
-[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_pushbox2"]
-albedo_color = Color(0.2, 0.45, 0.55, 1)
-roughness = 0.75
-
-[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_pushbox3"]
-albedo_color = Color(0.35, 0.55, 0.22, 1)
 roughness = 0.75
 
 [sub_resource type="BoxMesh" id="BoxMesh_pushbox"]
@@ -50,8 +39,6 @@ size = Vector3(1, 1, 1)
 [sub_resource type="BoxMesh" id="BoxMesh_floor"]
 
 [sub_resource type="BoxMesh" id="BoxMesh_border"]
-
-[sub_resource type="BoxMesh" id="BoxMesh_testcube"]
 
 [sub_resource type="BoxShape3D" id="BoxShape3D_floor"]
 size = Vector3(1, 1, 1)
@@ -102,13 +89,19 @@ transform = Transform3D(0.35, 0, 0, 0, 0.25, 0, 0, 0, 20, 10.175, 0.08, 0)
 material_override = SubResource("StandardMaterial3D_border")
 mesh = SubResource("BoxMesh_border")
 
-[node name="TestCube" type="MeshInstance3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 2, 0, 0, 0, 1, 0, 1, -5)
-material_override = SubResource("StandardMaterial3D_testcube")
-mesh = SubResource("BoxMesh_testcube")
+[node name="GameManager" type="Node" parent="."]
+script = ExtResource("3_game_manager")
+
+[node name="SpawnPoints" type="Node3D" parent="GameManager"]
+
+[node name="PlayerSpawn" type="Marker3D" parent="GameManager/SpawnPoints"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.1, 7)
+
+[node name="EnemySpawn" type="Marker3D" parent="GameManager/SpawnPoints"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, -7)
 
 [node name="PushBox1" type="RigidBody3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.6, -4)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.6, 0)
 mass = 2.0
 
 [node name="MeshInstance3D" type="MeshInstance3D" parent="PushBox1"]
@@ -118,39 +111,11 @@ mesh = SubResource("BoxMesh_pushbox")
 [node name="CollisionShape3D" type="CollisionShape3D" parent="PushBox1"]
 shape = SubResource("BoxShape3D_pushbox")
 
-[node name="PushBox2" type="RigidBody3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2, 0.6, -5.5)
-mass = 2.0
-
-[node name="MeshInstance3D" type="MeshInstance3D" parent="PushBox2"]
-material_override = SubResource("StandardMaterial3D_pushbox2")
-mesh = SubResource("BoxMesh_pushbox")
-
-[node name="CollisionShape3D" type="CollisionShape3D" parent="PushBox2"]
-shape = SubResource("BoxShape3D_pushbox")
-
-[node name="PushBox3" type="RigidBody3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2, 0.6, -5.5)
-mass = 2.0
-
-[node name="MeshInstance3D" type="MeshInstance3D" parent="PushBox3"]
-material_override = SubResource("StandardMaterial3D_pushbox3")
-mesh = SubResource("BoxMesh_pushbox")
-
-[node name="CollisionShape3D" type="CollisionShape3D" parent="PushBox3"]
-shape = SubResource("BoxShape3D_pushbox")
-
-[node name="Enemy1" parent="." instance=ExtResource("4_push_enemy")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, -8)
-
-[node name="Enemy2" parent="." instance=ExtResource("4_push_enemy")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -4, 1, -7)
-
-[node name="Enemy3" parent="." instance=ExtResource("4_push_enemy")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4, 1, -7)
+[node name="ArenaOpponent" parent="." instance=ExtResource("5_arena_opponent")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, -7)
 
 [node name="Player" type="CharacterBody3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.1, 0)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.1, 7)
 script = ExtResource("1_player")
 
 [node name="Camera3D" type="Camera3D" parent="Player"]
@@ -164,6 +129,37 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.9, 0)
 shape = SubResource("CapsuleShape3D_player")
 
 [node name="UI" type="CanvasLayer" parent="."]
+script = ExtResource("4_arena_ui")
+
+[node name="ScoreLabel" type="Label" parent="UI"]
+anchors_preset = 5
+anchor_left = 0.5
+anchor_right = 0.5
+offset_left = -160.0
+offset_top = 12.0
+offset_right = 160.0
+offset_bottom = 44.0
+theme_override_colors/font_color = Color(0.92, 0.93, 0.98, 1)
+theme_override_font_sizes/font_size = 22
+text = "Player: 0 | Enemy: 0"
+horizontal_alignment = 1
+
+[node name="MatchLabel" type="Label" parent="UI"]
+visible = false
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -200.0
+offset_top = -28.0
+offset_right = 200.0
+offset_bottom = 28.0
+theme_override_colors/font_color = Color(1, 0.85, 0.35, 1)
+theme_override_font_sizes/font_size = 36
+text = "You Win!"
+horizontal_alignment = 1
+vertical_alignment = 1
 
 [node name="WeaponLabel" type="Label" parent="UI"]
 anchors_preset = 2
@@ -176,4 +172,3 @@ offset_bottom = -12.0
 theme_override_colors/font_color = Color(0.88, 0.9, 0.95, 1)
 theme_override_font_sizes/font_size = 20
 text = "Weapon: Pistol"
-script = ExtResource("3_weapon_hud")
