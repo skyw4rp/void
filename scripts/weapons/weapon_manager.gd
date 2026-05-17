@@ -64,7 +64,13 @@ func try_fire() -> bool:
 	var aim_basis := _camera.global_transform.basis
 
 	_cooldown_remaining = WeaponFiring.fire(
-		_current, origin, base_dir, aim_basis, get_tree().current_scene, spawn_forward_offset
+		_current,
+		origin,
+		base_dir,
+		aim_basis,
+		get_tree().current_scene,
+		spawn_forward_offset,
+		_camera.get_parent()
 	)
 	return true
 

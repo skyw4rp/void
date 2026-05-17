@@ -43,8 +43,15 @@ func try_fire(origin: Vector3, direction: Vector3, aim_basis: Basis) -> bool:
 	if _cooldown_remaining > 0.0:
 		return false
 
+	var shooter := get_parent().get_parent() as Node
 	_cooldown_remaining = WeaponFiring.fire(
-		_current, origin, direction, aim_basis, get_tree().current_scene, spawn_forward_offset
+		_current,
+		origin,
+		direction,
+		aim_basis,
+		get_tree().current_scene,
+		spawn_forward_offset,
+		shooter
 	)
 	print("Enemy fired %s" % WeaponDefs.get_weapon_name(_current))
 	return true

@@ -10,6 +10,7 @@ extends Area3D
 var _direction: Vector3 = Vector3.FORWARD
 var _spent: bool = false
 var _launched: bool = false
+var _shooter: Node = null
 
 
 func _ready() -> void:
@@ -17,9 +18,10 @@ func _ready() -> void:
 	get_tree().create_timer(lifetime).timeout.connect(_despawn)
 
 
-func launch(from: Vector3, direction: Vector3) -> void:
+func launch(from: Vector3, direction: Vector3, shooter: Node = null) -> void:
 	global_position = from
 	_direction = direction.normalized()
+	_shooter = shooter
 	_launched = true
 
 
@@ -32,19 +34,25 @@ func _physics_process(delta: float) -> void:
 func _on_body_entered(body: Node3D) -> void:
 	if _spent:
 		return
+	if PushHitResolver.is_shooter(body, _shooter):
+		return
+
 	if body is RigidBody3D:
 		var rigid := body as RigidBody3D
 		var offset := global_position - rigid.global_position
 		rigid.apply_impulse(_direction * push_force, offset)
 		print("Bazooka: direct hit on '%s'" % rigid.name)
+	elif PushHitResolver.apply_projectile_hit(body, _direction, push_force, global_position):
+		pass
 	else:
 		print("Bazooka: hit '%s' — exploding" % body.name)
+
 	_explode()
 	_despawn()
 
 
 func _explode() -> void:
-	PushExplosion.detonate(global_position, explosion_radius, explosion_force, get_world_3d())
+	PushExplosion.detonate(global_position, explosion_radius, explosion_force, self, _shooter)
 
 
 func _despawn() -> void:

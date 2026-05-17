@@ -52,6 +52,15 @@ Main
 
 Push projectiles affect the AI, crates, and physics objects. No damage.
 
+## Knockback (player + AI)
+
+Projectiles and bazooka explosions use the same shared `push_force` / `explosion_force` values for everyone.
+
+- **RigidBody3D** (AI, crates): `apply_impulse`
+- **Player** (`CharacterBody3D`): `apply_knockback(direction, force)` adds velocity with a small upward lift, scaled to match ~3.5 kg opponent feel
+
+Enemy shots can knock the player off the platform; your shots knock the AI the same way. Projectiles store a **shooter** node and ignore it to prevent self-hits. Collision: projectiles on layer 2, mask 1 (player + world on layer 1).
+
 ## HUD
 
 - Top: `Player: 0 | Enemy: 0`

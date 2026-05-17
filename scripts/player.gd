@@ -17,6 +17,10 @@ var _void_y: float = -20.0
 var _void_reported: bool = false
 var _game_manager: Node
 
+## Approximate mass used to match RigidBody3D impulse feel from shared weapon forces.
+const KNOCKBACK_MASS_REFERENCE: float = 3.5
+const KNOCKBACK_UPWARD_SCALE: float = 0.15
+
 
 func _ready() -> void:
 	add_to_group("player")
@@ -27,6 +31,14 @@ func _ready() -> void:
 	else:
 		_spawn_position = global_position
 	Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
+
+
+func apply_knockback(direction: Vector3, force: float) -> void:
+	var dir := direction.normalized()
+	var strength := force / KNOCKBACK_MASS_REFERENCE
+	var knock := dir * strength
+	knock.y += strength * KNOCKBACK_UPWARD_SCALE
+	velocity += knock
 
 
 func arena_respawn(spawn_position: Vector3) -> void:
