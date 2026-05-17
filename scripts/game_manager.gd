@@ -17,7 +17,6 @@ const WIN_SCORE: int = 5
 const VOID_Y: float = -20.0
 const COUNTDOWN_STEP_SEC: float = 1.0
 const FIGHT_TEXT_SEC: float = 0.7
-const KILL_DEATH_VIEW_SEC: float = 1.2
 const VOID_FALL_DELAY_SEC: float = 2.0
 const VOID_EFFECT_VIEW_SEC: float = 1.2
 
@@ -71,6 +70,7 @@ func report_enemy_void_fall() -> void:
 func finish_player_void_death() -> void:
 	if not _handling_round_end:
 		return
+	print("Death sequence finished, scoring")
 	enemy_score += 1
 	print("Enemy scored!")
 	death_message_hidden.emit()
@@ -81,6 +81,7 @@ func finish_player_void_death() -> void:
 func finish_enemy_void_death() -> void:
 	if not _handling_round_end:
 		return
+	print("Death sequence finished, scoring")
 	player_score += 1
 	print("Player scored!")
 	death_message_hidden.emit()
@@ -88,19 +89,27 @@ func finish_enemy_void_death() -> void:
 	await _finish_round_after_score()
 
 
-## Called after corpse spawn — delayed score and countdown so the launch is visible.
-func on_health_death(player_died: bool) -> void:
+func on_health_death(player_died: bool, heavy_death: bool = false) -> void:
 	if _handling_round_end:
 		return
 	_handling_round_end = true
 	state = RoundState.ROUND_OVER
 
 	if player_died:
-		death_message_changed.emit("You were eliminated!")
+		if heavy_death:
+			death_message_changed.emit("YOU WERE OBLITERATED")
+		else:
+			death_message_changed.emit("You were eliminated!")
 	else:
 		death_message_changed.emit("Enemy eliminated!")
 
-	await get_tree().create_timer(KILL_DEATH_VIEW_SEC).timeout
+	var view_sec: float = (
+		GameBalance.gib_collapse_score_sec() if heavy_death else GameBalance.KILL_DEATH_VIEW_SEC
+	)
+	await get_tree().create_timer(view_sec).timeout
+	if heavy_death:
+		print("Gib collapse finished")
+	print("Death sequence finished, scoring")
 	death_message_hidden.emit()
 
 	if player_died:
@@ -123,14 +132,16 @@ func _run_player_void_death_sequence() -> void:
 	if player and player.has_method("begin_void_dying"):
 		player.call("begin_void_dying")
 
-	await get_tree().create_timer(VOID_FALL_DELAY_SEC).timeout
+	if GameBalance.uses_void_gore_cinematic():
+		await VoidGoreSequence.run(get_tree().current_scene, player, get_tree())
+	else:
+		await get_tree().create_timer(VOID_FALL_DELAY_SEC).timeout
+		var effect_pos: Vector3 = _fighter_void_effect_position(player)
+		VoidDeathEffect.play_at(get_tree().current_scene, effect_pos, GameBalance.VOID_DEATH_STYLE)
+		await get_tree().create_timer(VOID_EFFECT_VIEW_SEC).timeout
 
-	var effect_pos: Vector3 = _fighter_void_effect_position(player)
-	VoidDeathEffect.play_at(get_tree().current_scene, effect_pos, GameBalance.VOID_DEATH_STYLE)
 	if player and player.has_method("end_void_dying"):
 		player.call("end_void_dying")
-
-	await get_tree().create_timer(VOID_EFFECT_VIEW_SEC).timeout
 	await finish_player_void_death()
 
 
@@ -144,14 +155,16 @@ func _run_enemy_void_death_sequence() -> void:
 	if opponent and opponent.has_method("begin_void_dying"):
 		opponent.call("begin_void_dying")
 
-	await get_tree().create_timer(VOID_FALL_DELAY_SEC).timeout
+	if GameBalance.uses_void_gore_cinematic():
+		await VoidGoreSequence.run(get_tree().current_scene, opponent, get_tree())
+	else:
+		await get_tree().create_timer(VOID_FALL_DELAY_SEC).timeout
+		var effect_pos: Vector3 = _fighter_void_effect_position(opponent)
+		VoidDeathEffect.play_at(get_tree().current_scene, effect_pos, GameBalance.VOID_DEATH_STYLE)
+		await get_tree().create_timer(VOID_EFFECT_VIEW_SEC).timeout
 
-	var effect_pos: Vector3 = _fighter_void_effect_position(opponent)
-	VoidDeathEffect.play_at(get_tree().current_scene, effect_pos, GameBalance.VOID_DEATH_STYLE)
 	if opponent and opponent.has_method("end_void_dying"):
 		opponent.call("end_void_dying")
-
-	await get_tree().create_timer(VOID_EFFECT_VIEW_SEC).timeout
 	await finish_enemy_void_death()
 
 
@@ -201,6 +214,7 @@ func _run_countdown() -> void:
 	_clear_projectiles()
 	_clear_corpses()
 	_clear_void_effects()
+	_clear_gib_chunks()
 	death_message_hidden.emit()
 	void_overlay_changed.emit(false, false)
 	_respawn_fighters()
@@ -247,6 +261,15 @@ func _clear_void_effects() -> void:
 		if node is Node:
 			(node as Node).queue_free()
 	for node in get_tree().get_nodes_in_group("void_fragment"):
+		if node is Node:
+			(node as Node).queue_free()
+	for node in get_tree().get_nodes_in_group("gore_chunk"):
+		if node is Node:
+			(node as Node).queue_free()
+
+
+func _clear_gib_chunks() -> void:
+	for node in get_tree().get_nodes_in_group("gib_chunk"):
 		if node is Node:
 			(node as Node).queue_free()
 

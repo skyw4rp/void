@@ -32,8 +32,13 @@ var _game_manager: Node
 
 var _last_vertical_lift_time_sec: float = -1.0
 var _death_handled: bool = false
+var _obliteration_shake: float = 0.0
 var _void_dying: bool = false
 var _void_fall_shake: float = 0.0
+var _void_fall_time: float = 0.0
+var _void_instability_time: float = 0.0
+var _base_camera_fov: float = GameBalance.VOID_FALL_FOV_START
+var _void_fall_proxy: MeshInstance3D
 
 const CORPSE_ALBEDO: Color = Color(0.42, 0.82, 1.0)
 const CORPSE_EMISSION: Color = Color(0.15, 0.45, 0.75)
@@ -68,10 +73,35 @@ func _on_combat_died(_attacker: Node) -> void:
 	if _death_handled:
 		return
 	_death_handled = true
-	_spawn_death_corpse()
+	var heavy: bool = combat_stats.is_heavy_death()
+	var world: Node = get_tree().current_scene
+	if heavy:
+		_begin_obliteration_shake()
+		GibSpawner.play_heavy_death(
+			world,
+			get_death_gib_position(),
+			combat_stats.last_hit_direction,
+			combat_stats.get_corpse_launch_force(),
+			combat_stats.last_damage_source
+		)
+	else:
+		_spawn_death_corpse()
+	_hide_live_fighter()
 	_enter_death_hidden_state()
 	if _game_manager and _game_manager.has_method("on_health_death"):
-		_game_manager.on_health_death(true)
+		_game_manager.on_health_death(true, heavy)
+
+
+func get_death_gib_position() -> Vector3:
+	return global_position + Vector3(0.0, 0.85, 0.0)
+
+
+func _begin_obliteration_shake() -> void:
+	_obliteration_shake = 1.0
+
+
+func _hide_live_fighter() -> void:
+	_hide_void_fall_proxy()
 
 
 func _spawn_death_corpse() -> void:
@@ -108,13 +138,58 @@ func is_void_dying() -> bool:
 func begin_void_dying() -> void:
 	_void_dying = true
 	_void_reported = true
+	_void_fall_time = 0.0
+	_void_fall_shake = 0.0
+	_void_instability_time = 0.0
+	_base_camera_fov = camera.fov
 	collision_layer = 0
 	collision_mask = 0
+	if GameBalance.uses_void_gore_cinematic():
+		_ensure_void_fall_proxy()
+		if _void_fall_proxy:
+			_void_fall_proxy.visible = true
+
+
+func begin_void_instability() -> void:
+	_void_instability_time = GameBalance.VOID_GORE_INSTABILITY_SEC
 
 
 func end_void_dying() -> void:
 	_void_dying = false
+	_hide_void_fall_proxy()
 	_enter_death_hidden_state()
+
+
+func get_void_breakup_position() -> Vector3:
+	return global_position + Vector3(0.0, 0.85, 0.0)
+
+
+func hide_for_void_breakup() -> void:
+	_hide_void_fall_proxy()
+
+
+func _ensure_void_fall_proxy() -> void:
+	if _void_fall_proxy != null:
+		return
+	_void_fall_proxy = MeshInstance3D.new()
+	_void_fall_proxy.name = "VoidFallProxy"
+	var capsule := CapsuleMesh.new()
+	capsule.radius = 0.38
+	capsule.height = 1.45
+	_void_fall_proxy.mesh = capsule
+	var mat := StandardMaterial3D.new()
+	mat.albedo_color = Color(0.42, 0.82, 1.0, 1.0)
+	mat.emission_enabled = true
+	mat.emission = Color(0.15, 0.45, 0.75, 1.0)
+	mat.emission_energy_multiplier = 0.3
+	_void_fall_proxy.material_override = mat
+	_void_fall_proxy.position = Vector3(0.0, 0.85, 0.0)
+	add_child(_void_fall_proxy)
+
+
+func _hide_void_fall_proxy() -> void:
+	if _void_fall_proxy:
+		_void_fall_proxy.visible = false
 
 
 ## Returns horizontal knockback strength applied. Set allow_vertical_lift false for extra shotgun pellets.
@@ -194,11 +269,15 @@ func arena_respawn(spawn_position: Vector3) -> void:
 	_void_reported = false
 	_void_dying = false
 	_death_handled = false
+	_obliteration_shake = 0.0
 	_void_fall_shake = 0.0
+	_void_fall_time = 0.0
 	_last_vertical_lift_time_sec = -1.0
+	_hide_void_fall_proxy()
 	_exit_death_hidden_state()
 	camera.rotation.x = 0.0
 	camera.rotation.z = 0.0
+	camera.fov = GameBalance.VOID_FALL_FOV_START
 	# TODO: camera shake or screen flash on respawn.
 
 
@@ -222,15 +301,43 @@ func _unhandled_input(event: InputEvent) -> void:
 		camera.rotation.x = clampf(camera.rotation.x, LOOK_PITCH_MIN, LOOK_PITCH_MAX)
 
 
-func _physics_process(delta: float) -> void:
-	if _void_dying:
-		velocity.x = move_toward(velocity.x, 0.0, 2.0)
-		velocity.z = move_toward(velocity.z, 0.0, 2.0)
-		velocity.y -= _gravity * delta
-		_void_fall_shake = minf(_void_fall_shake + delta * 2.5, 1.0)
-		var shake: float = _void_fall_shake * 0.04
+func _process(delta: float) -> void:
+	if _obliteration_shake > 0.0:
+		_obliteration_shake = maxf(0.0, _obliteration_shake - delta * 0.35)
+		var shake: float = _obliteration_shake * 0.14
 		camera.rotation.x += randf_range(-shake, shake)
-		camera.rotation.z = randf_range(-shake * 0.5, shake * 0.5)
+		camera.rotation.z += randf_range(-shake * 0.7, shake * 0.7)
+
+
+func _physics_process(delta: float) -> void:
+	if _death_handled and not _void_dying:
+		if _obliteration_shake > 0.0:
+			velocity = Vector3.ZERO
+			move_and_slide()
+		return
+
+	if _void_dying:
+		if _void_instability_time > 0.0:
+			_void_instability_time -= delta
+			velocity.x += randf_range(-1.0, 1.0) * 4.0 * delta
+			velocity.z += randf_range(-1.0, 1.0) * 4.0 * delta
+			velocity.y -= _gravity * delta * 0.35
+			camera.rotation.z += randf_range(-0.03, 0.03)
+		else:
+			velocity.x = move_toward(velocity.x, 0.0, 2.0)
+			velocity.z = move_toward(velocity.z, 0.0, 2.0)
+			velocity.y -= _gravity * delta
+		_void_fall_time += delta
+		_void_fall_shake = minf(_void_fall_shake + delta * 2.5, 1.0)
+		var shake: float = _void_fall_shake * 0.05
+		camera.rotation.x += randf_range(-shake, shake)
+		if _void_instability_time <= 0.0:
+			camera.rotation.z += randf_range(-shake * 0.5, shake * 0.5)
+		if GameBalance.uses_void_gore_cinematic():
+			var fall_t: float = clampf(
+				_void_fall_time / GameBalance.VOID_GORE_BURST_AT, 0.0, 1.0
+			)
+			camera.fov = lerpf(_base_camera_fov, GameBalance.VOID_FALL_FOV_END, fall_t)
 		move_and_slide()
 		return
 

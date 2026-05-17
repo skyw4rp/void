@@ -1,0 +1,57 @@
+[gd_scene format=3 uid="uid://r4cremyu2plg"]
+
+[ext_resource type="Script" path="res://scripts/effects/void_corruption_cloud.gd" id="1_script"]
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_fog"]
+transparency = 1
+blend_mode = 1
+shading_mode = 0
+albedo_color = Color(0.25, 0.85, 0.55, 0.22)
+emission_enabled = true
+emission = Color(0.15, 0.55, 0.95, 1)
+emission_energy_multiplier = 0.9
+cull_mode = 2
+
+[sub_resource type="SphereMesh" id="SphereMesh_fog"]
+radius = 1.0
+height = 2.0
+
+[node name="VoidCorruptionCloud" type="Node3D"]
+script = ExtResource("1_script")
+
+[node name="FogVolume" type="MeshInstance3D" parent="."]
+material_override = SubResource("StandardMaterial3D_fog")
+mesh = SubResource("SphereMesh_fog")
+
+[node name="DriftParticles" type="CPUParticles3D" parent="."]
+emitting = false
+amount = 36
+lifetime = 2.5
+direction = Vector3(0, 1, 0)
+spread = 55.0
+gravity = Vector3(0, -0.4, 0)
+initial_velocity_min = 0.6
+initial_velocity_max = 2.2
+scale_amount_min = 0.15
+scale_amount_max = 0.35
+color = Color(0.35, 0.95, 0.7, 0.55)
+
+[node name="MistParticles" type="CPUParticles3D" parent="."]
+emitting = false
+amount = 24
+lifetime = 1.8
+emission_shape = 1
+emission_sphere_radius = 1.2
+direction = Vector3(0, 1, 0)
+spread = 180.0
+gravity = Vector3(0, 0.2, 0)
+initial_velocity_min = 0.3
+initial_velocity_max = 1.0
+scale_amount_min = 0.2
+scale_amount_max = 0.5
+color = Color(0.5, 0.2, 0.95, 0.4)
+
+[node name="PulseLight" type="OmniLight3D" parent="."]
+light_color = Color(0.45, 0.85, 1, 1)
+light_energy = 1.2
+omni_range = 6.0

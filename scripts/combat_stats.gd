@@ -5,6 +5,9 @@ extends Node
 signal stats_changed(shield: int, health: int)
 signal died(attacker: Node)
 
+const HEAVY_OVERKILL_THRESHOLD: int = 25
+const HEAVY_DAMAGE_THRESHOLD: int = 40
+
 @export var max_health: int = 100
 @export var max_shield: int = 100
 @export var debug_name: String = "Fighter"
@@ -16,6 +19,8 @@ var last_hit_direction: Vector3 = Vector3.FORWARD
 var last_hit_force: float = 24.0
 var last_attacker: Node = null
 var last_damage_source: String = ""
+var last_damage_amount: int = 0
+var overkill_amount: int = 0
 
 
 func _ready() -> void:
@@ -29,6 +34,8 @@ func reset_combat_stats() -> void:
 	last_hit_force = 24.0
 	last_attacker = null
 	last_damage_source = ""
+	last_damage_amount = 0
+	overkill_amount = 0
 	stats_changed.emit(shield, health)
 	_log_stats()
 
@@ -58,13 +65,28 @@ func get_corpse_upward_boost() -> float:
 			return 6.0
 		"shotgun":
 			return 4.0
+		"railgun":
+			return 2.5
 		_:
 			return 3.0
+
+
+func is_heavy_death() -> bool:
+	if last_damage_source == "bazooka_direct" or last_damage_source == "bazooka_explosion":
+		return true
+	if overkill_amount >= HEAVY_OVERKILL_THRESHOLD:
+		return true
+	if last_damage_amount >= HEAVY_DAMAGE_THRESHOLD:
+		return true
+	return false
 
 
 func apply_damage(amount: int, attacker: Node = null) -> void:
 	if is_dead() or amount <= 0:
 		return
+
+	last_damage_amount = amount
+	overkill_amount = 0
 
 	var remaining: int = amount
 	if shield > 0:
@@ -72,7 +94,10 @@ func apply_damage(amount: int, attacker: Node = null) -> void:
 		shield -= absorbed
 		remaining -= absorbed
 	if remaining > 0:
-		health = maxi(0, health - remaining)
+		health -= remaining
+		if health < 0:
+			overkill_amount = absi(health)
+			health = 0
 
 	_log_stats()
 	stats_changed.emit(shield, health)

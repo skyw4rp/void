@@ -102,9 +102,9 @@ func _on_death_message_hidden() -> void:
 func _on_void_overlay_changed(active: bool, player_fell: bool) -> void:
 	_void_overlay.visible = active
 	if player_fell:
-		_void_overlay.color = Color(0.55, 0.05, 0.12, 0.38)
+		_void_overlay.color = Color(0.03, 0.06, 0.14, 0.48)
 	else:
-		_void_overlay.color = Color(0.08, 0.15, 0.45, 0.32)
+		_void_overlay.color = Color(0.05, 0.08, 0.16, 0.35)
 
 
 func _on_match_over(player_won: bool) -> void:

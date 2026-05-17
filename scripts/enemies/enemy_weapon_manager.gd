@@ -3,16 +3,16 @@ extends Node3D
 
 @export var spawn_forward_offset: float = 0.7
 
-@onready var _pistol_view: Node3D = $PistolView
+@onready var _railgun_view: Node3D = $RailgunView
 @onready var _shotgun_view: Node3D = $ShotgunView
 @onready var _bazooka_view: Node3D = $BazookaView
 
-var _current: WeaponDefs.Id = WeaponDefs.Id.PISTOL
+var _current: WeaponDefs.Id = WeaponDefs.Id.RAILGUN
 var _cooldown_remaining: float = 0.0
 
 
 func _ready() -> void:
-	switch_weapon(WeaponDefs.Id.PISTOL)
+	switch_weapon(WeaponDefs.Id.RAILGUN)
 
 
 func _physics_process(delta: float) -> void:
@@ -61,6 +61,6 @@ func try_fire(origin: Vector3, direction: Vector3, aim_basis: Basis) -> bool:
 
 
 func _update_viewmodels() -> void:
-	_pistol_view.visible = _current == WeaponDefs.Id.PISTOL
+	_railgun_view.visible = _current == WeaponDefs.Id.RAILGUN
 	_shotgun_view.visible = _current == WeaponDefs.Id.SHOTGUN
 	_bazooka_view.visible = _current == WeaponDefs.Id.BAZOOKA

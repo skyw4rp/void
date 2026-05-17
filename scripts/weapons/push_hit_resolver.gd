@@ -142,6 +142,43 @@ static func apply_damped_projectile_hit(
 	return handled
 
 
+## Railgun hit — strong horizontal shove, minimal vertical lift.
+static func apply_railgun_hit(
+	body: Node,
+	travel_direction: Vector3,
+	force: float,
+	hit_position: Vector3,
+	damage: int = 0,
+	attacker: Node = null,
+	damage_source: String = "railgun"
+) -> bool:
+	var raw_dir: Vector3 = travel_direction.normalized()
+	var horizontal_dir: Vector3 = _horizontal_dir_from(raw_dir)
+	var vertical_force: float = clampf(
+		raw_dir.y * force * WeaponDefs.RAILGUN_VERTICAL_FACTOR,
+		-2.0,
+		3.5
+	)
+	var handled: bool = false
+
+	if body is RigidBody3D:
+		var rigid: RigidBody3D = body as RigidBody3D
+		_apply_rigidbody_explosion_impulse(
+			rigid, horizontal_dir, force, vertical_force, hit_position
+		)
+		handled = true
+	elif body.has_method("apply_explosion_knockback"):
+		body.call("apply_explosion_knockback", horizontal_dir, force, vertical_force)
+		handled = true
+	elif body.has_method("apply_knockback"):
+		body.call("apply_knockback", horizontal_dir, force, false)
+		handled = true
+
+	if handled and damage > 0:
+		apply_damage_to_target(body, damage, attacker, horizontal_dir, force, damage_source)
+	return handled
+
+
 static func apply_projectile_hit(
 	body: Node,
 	travel_direction: Vector3,

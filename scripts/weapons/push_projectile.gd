@@ -5,7 +5,7 @@ extends Area3D
 @export var lifetime: float = 3.0
 @export var push_force: float = 18.0
 @export var damage: int = 12
-@export var damage_source: String = "pistol"
+@export var damage_source: String = "shotgun"
 
 var _direction: Vector3 = Vector3.FORWARD
 var _spent: bool = false

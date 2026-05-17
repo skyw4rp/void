@@ -93,7 +93,7 @@ Debug: `Enemy state: ATTACKING` / `RECOVERING`, `Enemy avoiding edge`
 ### Weapons (same stats as player)
 - **Shotgun** — close range
 - **Bazooka** — player near edge, ring-out angle, or medium range (not constant spam; ~38–55% roll)
-- **Pistol** — long range
+- **Railgun** — long range, precision beam
 - Random weapon swap every **4–6 s** between tactical picks
 
 ### Ring-out tactics
@@ -108,33 +108,60 @@ Debug: `Enemy state: ATTACKING` / `RECOVERING`, `Enemy avoiding edge`
 `scripts/combat_stats.gd` — child node on **Player** and **ArenaOpponent**:
 
 - `apply_damage(amount, attacker)` — shield first, then health
+- Tracks **`last_damage_amount`**, **`overkill_amount`** (abs health when health goes negative), **`last_damage_source`**, last hit direction/force
+- `is_heavy_death()` — rocket direct/explosion, overkill ≥ **25**, or last hit ≥ **40** damage
 - `reset_combat_stats()` — full restore at round start
 - `is_dead()` — health ≤ 0 triggers a point for the attacker
 - Debug: `Player shield: X health: Y` / `Enemy shield: X health: Y`
 
 HUD (`arena_ui.gd`): `Player HP: … | Shield: …` and `Enemy HP: … | Shield: …`
 
-### Death corpse feedback
+### Health death (kill, not void)
 
-On **health death** (not void ring-out):
+After the death spectacle, the point is awarded and the normal **3-2-1-FIGHT** countdown runs: **2.5 s** for normal kills (`KILL_DEATH_VIEW_SEC`), **1.8–2.2 s** for heavy collapse (`gib_collapse_score_sec()`). Debug: `Death sequence finished, scoring`.
 
-1. Spawn `scenes/effects/physics_corpse.tscn` — a simple **RigidBody3D** capsule (mass **5**, damped spin).
-2. Launch using the last hit’s **direction** and **force** from `CombatStats`, with per-weapon scaling on the corpse (`pistol` 0.45, `shotgun` 0.65, `bazooka_direct` 1.0, `bazooka_explosion` 1.1). Horizontal push is strong; upward speed is capped for plausible tumbling.
-3. Hide the live fighter until the round respawns; **no instant respawn** on kill.
-4. After **1.2 s**, award the point and run the normal **3-2-1-FIGHT** countdown.
-5. Corpses are in group **`corpse`** (layer **8**, weapons ignore them); cleared at round start.
+#### Normal death (railgun / shotgun / light hits)
 
-Debug: `Spawned player corpse` / `Spawned enemy corpse`, `Corpse final launch velocity: …`.
+1. Spawn `scenes/effects/physics_corpse.tscn` — **RigidBody3D** capsule (mass **5**, damped spin).
+2. Launch using last hit **direction** and **force** from `CombatStats`, with per-weapon scaling (`railgun` 0.55, `shotgun` 0.65, `bazooka_direct` 1.0, `bazooka_explosion` 1.1). Horizontal push is strong; upward speed is capped.
+3. Hide the live fighter until respawn.
+4. Corpses: group **`corpse`**, layer **8** — weapons/scoring ignore them; cleared at round start.
+
+Debug: `Spawned player corpse` / `Spawned enemy corpse`, `Enemy corpse spawned`.
+
+#### Heavy death (rocket / overkill) — fast collapse
+
+Triggered when `CombatStats.is_heavy_death()` is true:
+
+- `last_damage_source` is **`bazooka_direct`** or **`bazooka_explosion`**
+- **`overkill_amount` ≥ 25** (health went far below zero on the killing blow)
+- **`last_damage_amount` ≥ 40** on the killing hit
+
+1. Brief red flash + shock ring (`VoidDeathEffect.play_collapse_flash`).
+2. **0.1 s** pause, then **10–18** `gib_chunk.tscn` pieces spawn **clustered** at the death point (offset radius ≤ **0.45**).
+3. Chunks use **low horizontal/upward impulse**, strong **linear/angular damp**, and mostly **fall downward** — a fast body collapse, not a far-flinging explosion. Only ~18% pop slightly upward.
+4. Dark blood mist at center; chunks tumble nearby, then despawn after **3–4 s**.
+5. Hide live fighter; **no full corpse**. Score after **1.8–2.2 s** (`GameBalance.gib_collapse_score_sec()`); normal kills still use **2.5 s**.
+6. Gibs: group **`gib_chunk`**, layer **8** — weapons ignore them; cleared at round start.
+7. **Player** heavy kill: screen shake, camera stays active, HUD **`YOU WERE OBLITERATED`**.
+8. **Enemy** heavy kill: debug `Enemy gibbed by rocket`.
+
+Tuning lives in `game_balance.gd` (`GIB_HORIZONTAL_FORCE_*`, `GIB_UPWARD_FORCE_*`, `GIB_LINEAR_DAMP`, etc.).
+
+Debug: `Gib collapse spawned X chunks`, `Gib collapse finished`, `Death sequence finished, scoring`.
+
+Gib chunks and corpses are cleared at round start with projectiles/void effects.
 
 ### Void death spectacle
 
 When a fighter crosses **void_y** (`-20`):
 
-1. Enter **`void_dying`** — controls/AI off, body keeps falling (**2 s**).
+1. Enter **`void_dying`** — controls/AI off, body keeps falling.
 2. Player: camera falls with body; red void overlay + HUD (`PLAYER LOST TO THE VOID` / `ENEMY LOST TO THE VOID`).
 3. Play void death VFX at pit position (style from `GameBalance.VOID_DEATH_STYLE` in `scripts/game_balance.gd`).
-4. Award the point, hide the fighter, then normal **3-2-1-FIGHT** countdown.
-5. Void effects and fragments cleared at round start (with corpses/projectiles).
+4. **VOID_GORE**: score only after the full **~3.2 s** cinematic; other styles use **2.0 s** fall + **1.2 s** effect.
+5. Hide the fighter, then normal **3-2-1-FIGHT** countdown.
+6. Void effects, fragments, **`gore_chunk`**, and combat **`gib_chunk`** cleared at round start (with corpses/projectiles).
 
 `GameManager`: `report_player_void_fall()` / `report_enemy_void_fall()` → `finish_player_void_death()` / `finish_enemy_void_death()`.
 
@@ -158,33 +185,35 @@ Fall → freefall → corruption → breakup → burst → **score** → countdo
 | Time | Event |
 |------|--------|
 | **0.0s** | Fall begins; loss of balance / slide; controls off |
-| **0.35s** | Freefall — camera FOV **90→102**, shake ramps |
-| **0.5s** | Ambient void motes; audio: `Void wind` |
-| **1.2s** | Corruption gas cloud (`void_corruption_cloud.tscn`) — green/blue/purple fog, pulsing light |
-| **1.6s** | Body hidden; **6–12** `gore_chunk.tscn` physics chunks + blood mist; debug: `Body rupture` |
-| **2.0s** | Final disintegration burst; **point awarded**; debug: `Disintegration burst` |
+| **0.35s** | Instability / freefall — camera FOV **90→102**, shake ramps |
+| **0.7s** | Ambient void motes; audio: `Void wind` |
+| **1.5s** | Corruption gas cloud (`void_corruption_cloud.tscn`) — green/blue/purple fog, pulsing light |
+| **2.2s** | Body hidden; **8–14** `gib_chunk` physics pieces + blood mist; debug: `Body rupture` |
+| **3.2s** | Final disintegration burst; **point awarded**; debug: `Death sequence finished, scoring` / `Disintegration burst` |
 
 Gore is stylized sci-fi corruption (dark red/black chunks), not anatomical. Chunks/effects cleared at round start.
 
 ## Weapons (player)
 
-| Key | Weapon |
-|-----|--------|
-| **1** | Pistol — fast, light push |
-| **2** | Shotgun — pellet spread |
-| **3** | Bazooka — slow rocket + explosion push |
-| **Left click** | Fire |
+| Key | Weapon | Role |
+|-----|--------|------|
+| **1** | **Railgun** — instant beam, precision knockback | Single-target push at range |
+| **2** | **Shotgun** — pellet spread | Close-range blast |
+| **3** | **Bazooka** — slow rocket + explosion | Area / ring-out threat |
+| **Left click** | Fire | |
 
-Projectiles apply **knockback and damage** (no self-damage from your own shots). Crates still take push only.
+**Railgun** uses an instant ray (no spread, **120** unit range, **0.65 s** cooldown). A blue/purple/white **beam tracer** (~0.08–0.15 s) and a small impact flash show the hit. Debug: `Railgun` on fire.
 
-### Weapon damage (`weapon_defs.gd`)
+Shotgun and bazooka still use projectiles. All weapons apply **knockback and damage** (no self-damage). Crates still take push only.
 
-| Weapon | Damage |
-|--------|--------|
-| Pistol | **12** per hit |
-| Shotgun | **8** per pellet |
-| Bazooka direct | **35** |
-| Bazooka explosion | up to **45** (radius falloff) |
+### Weapon damage & force (`weapon_defs.gd`)
+
+| Weapon | Damage | Knockback `push_force` |
+|--------|--------|------------------------|
+| Railgun | **22** per hit | **34** (strong horizontal, low vertical) |
+| Shotgun | **8** per pellet | **24** per pellet |
+| Bazooka direct | **35** | **42** |
+| Bazooka explosion | up to **45** (radius falloff) | **82** explosion force |
 
 ## Knockback (player + AI)
 
@@ -222,7 +251,7 @@ Explosions use **mostly horizontal** push (ring-outs off the platform, not sky l
 | Location | What to tune |
 |----------|----------------|
 | `scripts/weapons/weapon_defs.gd` | Weapon `push_force` / `explosion_force` **and** knockback multipliers |
-| → Pistol `push_force` | Default **22** |
+| → Railgun `push_force` | Default **34** |
 | → Shotgun pellet `push_force` | Default **24** × 7 |
 | → Bazooka `push_force` / `explosion_force` | Defaults **42** / **82** |
 | `scripts/player.gd` (Inspector) | Optional overrides for player multipliers / max speed |

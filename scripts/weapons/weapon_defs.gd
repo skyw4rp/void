@@ -3,9 +3,9 @@
 class_name WeaponDefs
 extends RefCounted
 
-enum Id { PISTOL, SHOTGUN, BAZOOKA }
+enum Id { RAILGUN, SHOTGUN, BAZOOKA }
 
-const NAMES: Array[String] = ["Pistol", "Shotgun", "Bazooka"]
+const NAMES: Array[String] = ["Railgun", "Shotgun", "Bazooka"]
 
 ## Shared knockback tuning — player velocity vs RigidBody3D impulse.
 const PLAYER_KNOCKBACK_MULTIPLIER: float = 1.6
@@ -30,23 +30,23 @@ const PLAYER_EXPLOSION_MIN_VERTICAL_VELOCITY: float = -25.0
 const PLAYER_EXPLOSION_MAX_VERTICAL_VELOCITY: float = 22.0
 ## Direct bazooka hit — some lift, not a sky launch.
 const PROJECTILE_HIT_VERTICAL_FACTOR: float = 0.22
+## Railgun — precision knockback, minimal lift.
+const RAILGUN_VERTICAL_FACTOR: float = 0.06
 
 const DEFAULT_MAX_HEALTH: int = 100
 const DEFAULT_MAX_SHIELD: int = 100
 
 const STATS: Dictionary = {
-	Id.PISTOL: {
-		"cooldown": 0.15,
-		"pellets": 1,
-		"spread": 0.0,
-		"projectile": {
-			"speed": 50.0,
-			"push_force": 22.0,
-			"damage": 12,
-			"damage_source": "pistol",
-			"lifetime": 2.5,
-			"mesh_scale": 0.08,
-			"color": Color(0.75, 0.85, 1.0),
+	Id.RAILGUN: {
+		"cooldown": 0.65,
+		"use_railgun_ray": true,
+		"railgun": {
+			"range": 120.0,
+			"damage": 22,
+			"push_force": 34.0,
+			"damage_source": "railgun",
+			"beam_color": Color(0.72, 0.55, 1.0, 0.95),
+			"beam_emission": Color(0.45, 0.25, 0.95, 1.0),
 		},
 	},
 	Id.SHOTGUN: {

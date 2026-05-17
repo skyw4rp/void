@@ -18,10 +18,26 @@ var _style: int = GameBalance.VoidDeathStyle.DISINTEGRATE
 static func play_at(
 	parent: Node, position: Vector3, style: int = GameBalance.VOID_DEATH_STYLE
 ) -> void:
+	if style == GameBalance.VoidDeathStyle.VOID_GORE:
+		return
 	var effect: Node3D = SCENE.instantiate() as Node3D
 	parent.add_child(effect)
 	if effect.has_method("play"):
 		effect.call("play", position, style)
+
+
+static func play_final_burst(parent: Node, position: Vector3) -> void:
+	var effect: Node3D = SCENE.instantiate() as Node3D
+	parent.add_child(effect)
+	if effect.has_method("play_burst_only"):
+		effect.call("play_burst_only", position)
+
+
+static func play_collapse_flash(parent: Node, position: Vector3) -> void:
+	var effect: Node3D = SCENE.instantiate() as Node3D
+	parent.add_child(effect)
+	if effect.has_method("_start_collapse_flash"):
+		effect.call("_start_collapse_flash", position)
 
 
 func _ready() -> void:
@@ -45,8 +61,55 @@ func play(position: Vector3, style: int = GameBalance.VOID_DEATH_STYLE) -> void:
 			_play_explode()
 		GameBalance.VoidDeathStyle.GORE_PLACEHOLDER:
 			_play_gore()
+		GameBalance.VoidDeathStyle.VOID_GORE:
+			pass
 		_:
 			_play_disintegrate()
+
+
+func play_burst_only(position: Vector3) -> void:
+	global_position = position
+	visible = true
+	_playing = true
+	_elapsed = 0.0
+	if _disintegrate_root:
+		_disintegrate_root.visible = true
+	if _flash:
+		var mat: StandardMaterial3D = _flash.material_override as StandardMaterial3D
+		if mat:
+			mat.albedo_color = Color(0.55, 0.15, 0.85, 0.95)
+			mat.emission = Color(0.35, 0.9, 0.65, 1.0)
+	if _burst:
+		_burst.color = Color(0.45, 1.0, 0.75, 1.0)
+		_burst.emitting = true
+	get_tree().create_timer(1.2).timeout.connect(queue_free)
+
+
+func _start_collapse_flash(position: Vector3) -> void:
+	global_position = position
+	visible = true
+	_playing = true
+	_elapsed = 0.0
+	set_meta("collapse_flash", true)
+	if _disintegrate_root:
+		_disintegrate_root.visible = true
+	if _flash:
+		var mat: StandardMaterial3D = _flash.material_override as StandardMaterial3D
+		if mat:
+			mat.albedo_color = Color(0.55, 0.06, 0.08, 0.9)
+			mat.emission = Color(0.35, 0.05, 0.08, 1.0)
+		_flash.scale = Vector3.ONE * 0.25
+	if _ring:
+		_ring.visible = true
+		_ring.scale = Vector3(0.35, 0.08, 0.35)
+		var ring_mat: StandardMaterial3D = _ring.material_override as StandardMaterial3D
+		if ring_mat:
+			ring_mat.albedo_color = Color(0.4, 0.05, 0.08, 0.55)
+			ring_mat.emission = Color(0.25, 0.02, 0.04, 1.0)
+	if _burst:
+		_burst.color = Color(0.35, 0.05, 0.08, 0.85)
+		_burst.emitting = true
+	get_tree().create_timer(0.5).timeout.connect(queue_free)
 
 
 func _play_disintegrate() -> void:
@@ -109,6 +172,15 @@ func _process(delta: float) -> void:
 	if not _playing:
 		return
 	_elapsed += delta
+	if has_meta("collapse_flash"):
+		var t: float = clampf(_elapsed / 0.45, 0.0, 1.0)
+		if _flash:
+			_flash.scale = Vector3.ONE * lerpf(0.25, 1.1, t)
+		if _ring:
+			var ring_scale: float = lerpf(0.35, 2.2, t)
+			_ring.scale = Vector3(ring_scale, 0.06 + t * 0.12, ring_scale)
+			_ring.rotation.y += delta * 8.0
+		return
 	if _style != GameBalance.VoidDeathStyle.DISINTEGRATE:
 		if _elapsed >= LIFETIME_SEC:
 			_playing = false

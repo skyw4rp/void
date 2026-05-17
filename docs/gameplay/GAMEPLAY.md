@@ -28,7 +28,7 @@ Win conditions:
 
 | Weapon | Role |
 |--------|------|
-| **Pistol** | Fast, moderate push and damage |
+| **Railgun** | Instant beam, precision knockback, medium damage |
 | **Shotgun** | Spread pellets, strong close knockback |
 | **Bazooka** | Direct hit + explosion; ring-out tool |
 

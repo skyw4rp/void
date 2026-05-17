@@ -83,7 +83,7 @@ Full perceptual targets: [Art Direction](../art/ART_DIRECTION.md#psychological-t
 |------|--------|
 | **Engine** | Godot 4.6 |
 | **Mode** | 1v1 arena prototype (Neon Catacombs bridge) |
-| **Combat** | Pistol / shotgun / bazooka; shield + health |
+| **Combat** | Railgun / shotgun / bazooka; shield + health |
 | **Scoring** | Void ring-out or kill; first to 5 |
 | **Void deaths** | VOID_GORE cinematic pipeline (fall → corruption → breakup → burst) |
 | **Atmosphere** | Void atmosphere, observers, fog layers |

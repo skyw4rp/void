@@ -79,8 +79,8 @@ func launch(
 
 func _damage_source_scale(source: String) -> float:
 	match source:
-		"pistol":
-			return 0.45
+		"railgun":
+			return 0.55
 		"shotgun":
 			return 0.65
 		"bazooka_direct":

@@ -50,6 +50,7 @@ var _avoiding_edge_logged: bool = false
 var _prev_horizontal_speed: float = 0.0
 var _death_handled: bool = false
 var _void_dying: bool = false
+var _void_instability_time: float = 0.0
 
 const CORPSE_ALBEDO: Color = Color(0.85, 0.15, 0.2)
 const CORPSE_EMISSION: Color = Color(0.45, 0.05, 0.12)
@@ -82,10 +83,46 @@ func _on_combat_died(_attacker: Node) -> void:
 	if _death_handled:
 		return
 	_death_handled = true
-	_spawn_death_corpse()
+	var heavy: bool = combat_stats.is_heavy_death()
+	var world: Node = get_tree().current_scene
+	if heavy:
+		print("Enemy gibbed by rocket")
+		GibSpawner.play_heavy_death(
+			world,
+			get_death_gib_position(),
+			combat_stats.last_hit_direction,
+			combat_stats.get_corpse_launch_force(),
+			combat_stats.last_damage_source
+		)
+	else:
+		print("Enemy corpse spawned")
+		_spawn_death_corpse()
+	_hide_live_fighter()
 	_enter_death_hidden_state()
 	if _game_manager and _game_manager.has_method("on_health_death"):
-		_game_manager.on_health_death(false)
+		_game_manager.on_health_death(false, heavy)
+
+
+func get_death_gib_position() -> Vector3:
+	return global_position + Vector3(0.0, 0.8, 0.0)
+
+
+func _hide_live_fighter() -> void:
+	_set_fighter_meshes_visible(false)
+
+
+func _show_live_fighter() -> void:
+	_set_fighter_meshes_visible(true)
+
+
+func _set_fighter_meshes_visible(visible: bool) -> void:
+	for child in get_children():
+		if child is MeshInstance3D or child is CollisionShape3D:
+			(child as Node3D).visible = visible
+		elif child is Node3D and child.name != "WeaponPivot":
+			for sub in child.get_children():
+				if sub is MeshInstance3D:
+					(sub as MeshInstance3D).visible = visible
 
 
 func _spawn_death_corpse() -> void:
@@ -119,6 +156,12 @@ func _exit_death_hidden_state() -> void:
 	collision_mask = 1
 	freeze = false
 	gravity_scale = 1.0
+	var body_mesh: MeshInstance3D = get_node_or_null("MeshInstance3D") as MeshInstance3D
+	if body_mesh:
+		body_mesh.visible = true
+	var pivot: Node3D = get_node_or_null("WeaponPivot") as Node3D
+	if pivot:
+		pivot.visible = true
 
 
 func is_void_dying() -> bool:
@@ -128,6 +171,7 @@ func is_void_dying() -> bool:
 func begin_void_dying() -> void:
 	_void_dying = true
 	_void_reported = true
+	_void_instability_time = 0.0
 	visible = true
 	freeze = false
 	gravity_scale = 1.0
@@ -135,9 +179,26 @@ func begin_void_dying() -> void:
 	collision_mask = 0
 
 
+func begin_void_instability() -> void:
+	_void_instability_time = GameBalance.VOID_GORE_INSTABILITY_SEC
+
+
 func end_void_dying() -> void:
 	_void_dying = false
 	_enter_death_hidden_state()
+
+
+func get_void_breakup_position() -> Vector3:
+	return global_position + Vector3(0.0, 0.8, 0.0)
+
+
+func hide_for_void_breakup() -> void:
+	var body_mesh: MeshInstance3D = get_node_or_null("MeshInstance3D") as MeshInstance3D
+	if body_mesh:
+		body_mesh.visible = false
+	var pivot: Node3D = get_node_or_null("WeaponPivot") as Node3D
+	if pivot:
+		pivot.visible = false
 
 
 func _physics_process(delta: float) -> void:
@@ -145,7 +206,14 @@ func _physics_process(delta: float) -> void:
 		return
 
 	if _void_dying:
-		apply_central_force(Vector3.DOWN * 14.0 * mass)
+		if _void_instability_time > 0.0:
+			_void_instability_time -= delta
+			var slide: Vector3 = Vector3(randf_range(-1.0, 1.0), 0.0, randf_range(-1.0, 1.0))
+			apply_central_force(slide.normalized() * 18.0 * mass)
+			apply_torque_impulse(Vector3(randf_range(-0.4, 0.4), randf_range(-0.2, 0.2), randf_range(-0.4, 0.4)))
+			apply_central_force(Vector3.DOWN * 6.0 * mass)
+		else:
+			apply_central_force(Vector3.DOWN * 14.0 * mass)
 		_clamp_horizontal_speed()
 		return
 
@@ -202,6 +270,7 @@ func arena_respawn(spawn_position: Vector3) -> void:
 	_void_dying = false
 	_death_handled = false
 	_avoiding_edge_logged = false
+	_show_live_fighter()
 	_exit_death_hidden_state()
 	_reset_timers()
 	_set_state(AiState.ATTACKING)
@@ -372,7 +441,7 @@ func _update_weapon_ai(delta: float, distance: float, offset: Vector3) -> void:
 	_weapon_shuffle_timer -= delta
 	if _weapon_shuffle_timer <= 0.0:
 		var options: Array[WeaponDefs.Id] = [
-			WeaponDefs.Id.PISTOL,
+			WeaponDefs.Id.RAILGUN,
 			WeaponDefs.Id.SHOTGUN,
 			WeaponDefs.Id.BAZOOKA,
 		]
@@ -413,7 +482,10 @@ func _choose_weapon(distance: float, enemy_offset: Vector3) -> WeaponDefs.Id:
 		if randf() > 0.55:
 			return WeaponDefs.Id.BAZOOKA
 
-	return WeaponDefs.Id.PISTOL
+	if distance > medium_range:
+		return WeaponDefs.Id.RAILGUN
+
+	return WeaponDefs.Id.RAILGUN
 
 
 func _has_ringout_shot_angle() -> bool:

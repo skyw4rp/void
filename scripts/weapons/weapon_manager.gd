@@ -6,17 +6,17 @@ signal weapon_changed(weapon_name: String)
 @export var spawn_forward_offset: float = 0.6
 
 @onready var _camera: Camera3D = get_parent() as Camera3D
-@onready var _pistol_view: Node3D = $PistolView
+@onready var _railgun_view: Node3D = $RailgunView
 @onready var _shotgun_view: Node3D = $ShotgunView
 @onready var _bazooka_view: Node3D = $BazookaView
 
-var _current: WeaponDefs.Id = WeaponDefs.Id.PISTOL
+var _current: WeaponDefs.Id = WeaponDefs.Id.RAILGUN
 var _cooldown_remaining: float = 0.0
 
 
 func _ready() -> void:
 	add_to_group("weapon_manager")
-	switch_weapon(WeaponDefs.Id.PISTOL)
+	switch_weapon(WeaponDefs.Id.RAILGUN)
 
 
 func _physics_process(delta: float) -> void:
@@ -29,7 +29,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 
 	if event.is_action_pressed("weapon_1"):
-		switch_weapon(WeaponDefs.Id.PISTOL)
+		switch_weapon(WeaponDefs.Id.RAILGUN)
 	elif event.is_action_pressed("weapon_2"):
 		switch_weapon(WeaponDefs.Id.SHOTGUN)
 	elif event.is_action_pressed("weapon_3"):
@@ -48,7 +48,7 @@ func switch_weapon(weapon: WeaponDefs.Id) -> void:
 	if _current == weapon:
 		return
 	_current = weapon
-	_pistol_view.visible = weapon == WeaponDefs.Id.PISTOL
+	_railgun_view.visible = weapon == WeaponDefs.Id.RAILGUN
 	_shotgun_view.visible = weapon == WeaponDefs.Id.SHOTGUN
 	_bazooka_view.visible = weapon == WeaponDefs.Id.BAZOOKA
 	print("Weapon: %s" % WeaponDefs.get_weapon_name(weapon))
@@ -72,6 +72,8 @@ func try_fire() -> bool:
 		spawn_forward_offset,
 		_camera.get_parent()
 	)
+	if _current == WeaponDefs.Id.RAILGUN:
+		print("Railgun")
 	return true
 
 
