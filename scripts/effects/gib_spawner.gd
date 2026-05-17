@@ -12,6 +12,7 @@ static func play_heavy_death(
 	_force: float = 0.0,
 	_damage_source: String = ""
 ) -> void:
+	# Legacy entry — dismemberment is handled by DismembermentSpawner at death sites.
 	if world_root == null:
 		return
 	var tree: SceneTree = world_root.get_tree()

@@ -1,8 +1,11 @@
-[gd_scene load_steps=16 format=3 uid="uid://carenaopponent01"]
+[gd_scene load_steps=20 format=3 uid="uid://carenaopponent01"]
 
 [ext_resource type="Script" path="res://scripts/enemies/arena_opponent.gd" id="1_script"]
 [ext_resource type="Script" path="res://scripts/combat_stats.gd" id="3_combat_stats"]
-[ext_resource type="PackedScene" uid="uid://cenemyweaponmgr01" path="res://scenes/enemies/enemy_weapon_manager.tscn" id="2_weapons"]
+[ext_resource type="PackedScene" uid="uid://bpjutfm2uic7y" path="res://scenes/enemies/enemy_weapon_manager.tscn" id="2_weapons"]
+[ext_resource type="Script" path="res://scripts/animation/procedural_enemy_animator.gd" id="4_anim"]
+[ext_resource type="Script" path="res://scripts/animation/enemy_look_at_controller.gd" id="5_look"]
+[ext_resource type="Script" path="res://scripts/enemies/enemy_weapon_mount.gd" id="6_mount"]
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_armor"]
 albedo_color = Color(0.11, 0.1, 0.13, 1)
@@ -23,7 +26,7 @@ emission = Color(1, 0.35, 0.12, 1)
 emission_energy_multiplier = 1.35
 shading_mode = 1
 
-[sub_resource type="BoxMesh" id="BoxMesh_body"]
+[sub_resource type="BoxMesh" id="BoxMesh_torso"]
 size = Vector3(0.52, 0.58, 0.3)
 
 [sub_resource type="SphereMesh" id="SphereMesh_head"]
@@ -42,9 +45,16 @@ height = 0.72
 radius = 0.07
 height = 0.14
 
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_eye"]
+albedo_color = Color(1, 0.45, 0.15, 1)
+emission_enabled = true
+emission = Color(1, 0.55, 0.18, 1)
+emission_energy_multiplier = 2.2
+shading_mode = 1
+
 [sub_resource type="SphereMesh" id="SphereMesh_eye"]
-radius = 0.045
-height = 0.09
+radius = 0.07
+height = 0.14
 
 [sub_resource type="CapsuleShape3D" id="CapsuleShape3D_opponent"]
 radius = 0.45
@@ -52,6 +62,7 @@ height = 1.6
 
 [node name="ArenaOpponent" type="RigidBody3D"]
 axis_lock_angular_x = true
+axis_lock_angular_y = true
 axis_lock_angular_z = true
 linear_damp = 0.6
 mass = 5.0
@@ -65,12 +76,18 @@ ideal_distance_max = 11.0
 
 [node name="HumanoidVisual" type="Node3D" parent="."]
 
-[node name="Body" type="MeshInstance3D" parent="HumanoidVisual"]
+[node name="ProceduralEnemyAnimator" type="Node3D" parent="HumanoidVisual"]
+script = ExtResource("4_anim")
+
+[node name="EnemyLookAtController" type="Node3D" parent="HumanoidVisual"]
+script = ExtResource("5_look")
+
+[node name="Torso" type="MeshInstance3D" parent="HumanoidVisual"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.36, 0)
-mesh = SubResource("BoxMesh_body")
+mesh = SubResource("BoxMesh_torso")
 material_override = SubResource("StandardMaterial3D_armor")
 
-[node name="CoreGlow" type="MeshInstance3D" parent="HumanoidVisual/Body"]
+[node name="CoreGlow" type="MeshInstance3D" parent="HumanoidVisual/Torso"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.02, 0.14)
 mesh = SubResource("SphereMesh_core")
 material_override = SubResource("StandardMaterial3D_glow")
@@ -80,23 +97,23 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.92, 0)
 mesh = SubResource("SphereMesh_head")
 material_override = SubResource("StandardMaterial3D_armor")
 
-[node name="LeftEye" type="MeshInstance3D" parent="HumanoidVisual/Head"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.09, 0.04, -0.17)
+[node name="EyeLeft" type="MeshInstance3D" parent="HumanoidVisual/Head"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.12, 0.06, -0.28)
 mesh = SubResource("SphereMesh_eye")
-material_override = SubResource("StandardMaterial3D_glow")
+material_override = SubResource("StandardMaterial3D_eye")
 
-[node name="RightEye" type="MeshInstance3D" parent="HumanoidVisual/Head"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.09, 0.04, -0.17)
+[node name="EyeRight" type="MeshInstance3D" parent="HumanoidVisual/Head"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.12, 0.06, -0.28)
 mesh = SubResource("SphereMesh_eye")
-material_override = SubResource("StandardMaterial3D_glow")
+material_override = SubResource("StandardMaterial3D_eye")
 
 [node name="LeftArm" type="MeshInstance3D" parent="HumanoidVisual"]
-transform = Transform3D(0.866025, 0, 0.5, 0, 1, 0, -0.5, 0, 0.866025, -0.34, 0.58, -0.08)
+transform = Transform3D(0.939693, 0, 0.34202, 0, 1, 0, -0.34202, 0, 0.939693, -0.3, 0.54, -0.14)
 mesh = SubResource("CapsuleMesh_limb")
 material_override = SubResource("StandardMaterial3D_armor")
 
 [node name="RightArm" type="MeshInstance3D" parent="HumanoidVisual"]
-transform = Transform3D(0.707107, -0.122788, -0.696364, 0, 0.984808, -0.173648, 0.707107, 0.122788, 0.696364, 0.34, 0.58, -0.22)
+transform = Transform3D(0.939693, 0, -0.34202, 0, 1, 0, 0.34202, 0, 0.939693, 0.28, 0.52, -0.1)
 mesh = SubResource("CapsuleMesh_limb")
 material_override = SubResource("StandardMaterial3D_accent")
 
@@ -110,14 +127,21 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.16, -0.46, 0)
 mesh = SubResource("CapsuleMesh_leg")
 material_override = SubResource("StandardMaterial3D_armor")
 
+[node name="WeaponMount" type="Node3D" parent="HumanoidVisual"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.06, 0.52, -0.2)
+script = ExtResource("6_mount")
+
+[node name="EnemyWeaponManager" parent="HumanoidVisual/WeaponMount" instance=ExtResource("2_weapons")]
+
+[node name="GroundCheck" type="RayCast3D" parent="."]
+position = Vector3(0, -0.75, 0)
+target_position = Vector3(0, -0.85, 0)
+collision_mask = 1
+hit_from_inside = true
+
 [node name="CollisionShape3D" type="CollisionShape3D" parent="."]
 shape = SubResource("CapsuleShape3D_opponent")
 
 [node name="CombatStats" type="Node" parent="."]
 script = ExtResource("3_combat_stats")
 debug_name = "Enemy"
-
-[node name="WeaponPivot" type="Node3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.08, 0.72, -0.22)
-
-[node name="EnemyWeaponManager" parent="WeaponPivot" instance=ExtResource("2_weapons")]

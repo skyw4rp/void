@@ -1,6 +1,7 @@
 [gd_scene format=3 uid="uid://4stks8flxun5"]
 
 [ext_resource type="Script" path="res://scripts/weapons/weapon_manager.gd" id="1_manager"]
+[ext_resource type="Script" path="res://scripts/animation/weapon_viewmodel_animator.gd" id="2_view_anim"]
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_railgun"]
 albedo_color = Color(0.45, 0.35, 0.75, 1)
@@ -42,3 +43,6 @@ visible = false
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.44, -0.28, -0.68)
 material_override = SubResource("StandardMaterial3D_bazooka")
 mesh = SubResource("BoxMesh_bazooka")
+
+[node name="WeaponViewmodelAnimator" type="Node3D" parent="."]
+script = ExtResource("2_view_anim")

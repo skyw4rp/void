@@ -97,25 +97,31 @@ func finish_enemy_void_death() -> void:
 	await _finish_round_after_score()
 
 
-func on_health_death(player_died: bool, heavy_death: bool = false) -> void:
+func on_health_death(
+	player_died: bool, dismembered: bool = false, death_stats: CombatStats = null
+) -> void:
 	if _handling_round_end:
 		return
 	_handling_round_end = true
 	state = RoundState.ROUND_OVER
 
 	if player_died:
-		if heavy_death:
-			death_message_changed.emit("YOU WERE OBLITERATED")
+		if death_stats:
+			death_message_changed.emit(death_stats.get_player_death_message())
 		else:
 			death_message_changed.emit("You were eliminated!")
 	else:
 		death_message_changed.emit("Enemy eliminated!")
 
-	var view_sec: float = (
-		GameBalance.gib_collapse_score_sec() if heavy_death else GameBalance.KILL_DEATH_VIEW_SEC
-	)
+	var view_sec: float = GameBalance.KILL_DEATH_VIEW_SEC
+	if dismembered:
+		view_sec = GameBalance.DISMEMBER_VIEW_SEC
+	elif death_stats and death_stats.is_heavy_death():
+		view_sec = GameBalance.gib_collapse_score_sec()
 	await get_tree().create_timer(view_sec).timeout
-	if heavy_death:
+	if dismembered:
+		print("Dismemberment sequence finished")
+	elif death_stats and death_stats.is_heavy_death():
 		print("Gib collapse finished")
 	print("Death sequence finished, scoring")
 	death_message_hidden.emit()
@@ -224,6 +230,7 @@ func _run_countdown() -> void:
 	_clear_corpses()
 	_clear_void_effects()
 	_clear_gib_chunks()
+	_clear_dismembered_parts()
 	_clear_railgun_vfx()
 	_clear_round_debris()
 	_spawn_round_debris()
@@ -294,6 +301,10 @@ func _clear_gib_chunks() -> void:
 			(node as Node).queue_free()
 
 
+func _clear_dismembered_parts() -> void:
+	DismembermentSpawner.clear_all(get_tree())
+
+
 func _clear_railgun_vfx() -> void:
 	RailgunImpactFlash.clear_all(get_tree())
 	RailgunImpactHole.clear_all(get_tree())
@@ -345,6 +356,10 @@ func _respawn_fighters() -> void:
 			opponent.call(
 				"apply_arena_bounds_from_dict", _arena_generator.get_current_arena_bounds()
 			)
+		if opponent.has_method("refresh_target_references"):
+			opponent.call("refresh_target_references")
+		if opponent.has_method("force_visual_aim_refresh"):
+			opponent.call("force_visual_aim_refresh")
 		_reset_combat_stats(opponent)
 
 

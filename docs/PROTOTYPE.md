@@ -153,13 +153,43 @@ Main
 
 `scenes/enemies/arena_opponent.tscn` + `scripts/enemies/arena_opponent.gd`
 
-**Visual:** low-poly humanoid placeholder (`HumanoidVisual`: torso, head, arms, legs, emissive core/eyes, red-orange accents). **Physics:** unchanged capsule `RigidBody3D` (knockback, AI, weapons unchanged). `WeaponPivot` at chest height aims at player.
+**Visual hierarchy** (`HumanoidVisual`):
+
+```
+Torso, Head (EyeLeft, EyeRight), LeftArm, RightArm, LeftLeg, RightLeg
+WeaponMount (EnemyWeaponMount)
+  EnemyWeaponManager
+    RailgunView / ShotgunView / BazookaView (+ Barrel mesh, Muzzle at barrel tip)
+```
+
+**WeaponMount** is the single visual aim pivot: local **-Z** is firing direction. `EnemyLookAtController` rotates body/head/arms; mount tracks the same cached aim point. **Physics:** unchanged capsule `RigidBody3D`.
+
+**Procedural animation (no skeletal rig):** `ProceduralEnemyAnimator` — locomotion states + `GroundCheck` grounded ray; shoot recoil kicks `WeaponMount` only (not barrel meshes).
+
+**Hard-synced aim:** `ArenaOpponent` owns `_current_aim_target`, `_last_valid_weapon_aim_position` (`+1.2` Y), `_last_valid_head_aim_position` (`+1.45` Y); updated and pushed to `EnemyLookAtController` **every physics frame before any AI early return** (including countdown). `_try_shot()` calls `align_weapon_to_target()` then fires from **Muzzle** along `get_weapon_forward()` (`-WeaponMount.basis.z`). `force_visual_aim_refresh()` after respawn (GameManager). Debug: `debug_show_weapon_forward` / `debug_show_muzzle` on mount. **Limitation:** placeholder meshes, not a skeletal rig.
 
 ### States
-- **ATTACKING** — normal arena fighter behavior
-- **RECOVERING** (0.8–1.2s) — after heavy knockback or getting near the rim; moves to center, does not shoot
+- **HUNTING** — default predatory arena movement
+- **PRESSURING** — player near edge or ring-out angle; burst pushes
+- **EVADING** — AI low shield/health; micro-strafes + dodge bursts
+- **EXECUTING** — player low health; aggressive closes
+- **RECOVERING** (0.8–1.2s) — after heavy knockback or near rim; no shooting
+- **IN_COVER** — breaks LOS, peeks to fire
 
-Debug: `Enemy state: ATTACKING` / `RECOVERING`, `Enemy avoiding edge`
+Debug: `Enemy state: HUNTING` / `PRESSURING` / …, optional `debug_ai_movement`
+
+### Gladiator locomotion (VOID arena mastery)
+
+**Philosophy:** Quake III / UT / DOOM Eternal–inspired — fast, physics-driven, skill-rewarding. Retuned for **heavier, more readable** arena combat: still elite gladiators, not slow military movement.
+
+**Player** (`player.gd` + `scripts/movement/`):
+- Quake-style accel/friction/air control — ~**7.6** ground / **9.0** air max speed (down from 9.8 / 11)
+- **Shift + direction** or **double-tap WASD** → short dodge (~**2.05** u, **1.4 s** cooldown)
+- Camera: reduced speed FOV boost and strafe tilt
+- Rocket jump force unchanged; knockback flow preserved
+- **Viewmodel motion:** `WeaponManager/WeaponViewmodelAnimator` (`scripts/animation/weapon_viewmodel_animator.gd`) — sway, walk bob, per-weapon recoil (railgun snap / shotgun kick / bazooka heavy), switch dip on 1–3. Visual only on view meshes.
+
+**Enemy:** Controlled speed (~**12.5** move force, **6.5** max speed). **Soft edge** (past safe): inward steer while still strafing/shooting. **Hard edge** (past danger): short **RECOVERING** burst (**0.55–0.9 s**) with **1.5 s** re-entry cooldown — no fire only in hard zone. Stale aim (**3 s** no shot) forces reposition. States: HUNTING / PRESSURING / EVADING / EXECUTING / IN_COVER stay active fighters.
 
 ### Arena awareness
 - Rectangular bounds from `ArenaGenerator.get_current_arena_bounds()`
@@ -190,8 +220,10 @@ Debug: `Enemy state: ATTACKING` / `RECOVERING`, `Enemy avoiding edge`
 `scripts/combat_stats.gd` — child node on **Player** and **ArenaOpponent**:
 
 - `apply_damage(amount, attacker)` — shield first, then health
-- Tracks **`last_damage_amount`**, **`overkill_amount`** (abs health when health goes negative), **`last_damage_source`**, last hit direction/force
+- Tracks **`last_damage_amount`**, **`overkill_amount`**, **`last_damage_source`**, **`last_hit_direction`**, **`last_hit_force`**, **`last_explosion_origin`** (explosions), **`last_hit_world_position`**
 - `is_heavy_death()` — rocket direct/explosion, overkill ≥ **25**, or last hit ≥ **40** damage
+- `is_dismemberment_death()` — heavy kills + strong shotgun (**≥28** dmg) + railgun overkill
+- `get_dismemberment_profile()` — `shotgun`, `rocket_direct`, `explosion`, `railgun`, `heavy`
 - `reset_combat_stats()` — full restore at round start
 - `is_dead()` — health ≤ 0 triggers a point for the attacker
 - Debug: `Player shield: X health: Y` / `Enemy shield: X health: Y`
@@ -200,39 +232,38 @@ HUD (`arena_ui.gd`): `Player HP: … | Shield: …` and `Enemy HP: … | Shield:
 
 ### Health death (kill, not void)
 
-After the death spectacle, the point is awarded and the normal **3-2-1-FIGHT** countdown runs: **2.5 s** for normal kills (`KILL_DEATH_VIEW_SEC`), **1.8–2.2 s** for heavy collapse (`gib_collapse_score_sec()`). Debug: `Death sequence finished, scoring`.
+After the death spectacle, the point is awarded and **3-2-1-FIGHT** runs: **2.5 s** normal (`KILL_DEATH_VIEW_SEC`), **2.4 s** dismemberment (`DISMEMBER_VIEW_SEC`). Debug: `Death sequence finished, scoring`.
 
-#### Normal death (railgun / shotgun / light hits)
+#### Normal death (light hits)
 
-1. Spawn `scenes/effects/physics_corpse.tscn` — **RigidBody3D** capsule (mass **5**, damped spin).
-2. Launch using last hit **direction** and **force** from `CombatStats`, with per-weapon scaling (`railgun` 0.55, `shotgun` 0.65, `bazooka_direct` 1.0, `bazooka_explosion` 1.1). Horizontal push is strong; upward speed is capped.
-3. Hide the live fighter until respawn.
-4. Corpses: group **`corpse`**, layer **8** — weapons/scoring ignore them; cleared at round start.
+1. Spawn `physics_corpse.tscn` — launched from last hit direction/force (per-weapon corpse scaling).
+2. Hide live fighter; group **`corpse`**, layer **8**; cleared at round start.
 
-Debug: `Spawned player corpse` / `Spawned enemy corpse`, `Enemy corpse spawned`.
+#### Dismemberment death (`dismemberment_spawner.gd` + `body_part_chunk.tscn`)
 
-#### Heavy death (rocket / overkill) — fast collapse
+Triggered when `CombatStats.is_dismemberment_death()` is true. **No full corpse** — body breaks into directional parts.
 
-Triggered when `CombatStats.is_heavy_death()` is true:
+| Profile | Trigger | Physics |
+|---------|---------|---------|
+| **shotgun** | Source shotgun, damage ≥ **28** | Partial — parts along pellet/attacker direction, tighter spread |
+| **rocket_direct** | Bazooka direct | Full — parts along rocket travel + light radial scatter |
+| **explosion** | Bazooka splash | Radial from blast origin; falloff by distance |
+| **railgun** | Railgun + overkill | Beam line — torso/limbs along beam, low lateral spread |
+| **heavy** | Other heavy kills | Directed burst |
 
-- `last_damage_source` is **`bazooka_direct`** or **`bazooka_explosion`**
-- **`overkill_amount` ≥ 25** (health went far below zero on the killing blow)
-- **`last_damage_amount` ≥ 40** on the killing hit
+Spawns **4–7** large parts (torso, head, arms, legs, armor shards) + **8–18** small gibs + blood mist. Stylized dark red/black gore + metallic armor tints — no organ realism.
 
-1. Brief red flash + shock ring (`VoidDeathEffect.play_collapse_flash`).
-2. **0.1 s** pause, then **10–18** `gib_chunk.tscn` pieces spawn **clustered** at the death point (offset radius ≤ **0.45**).
-3. Chunks use **low horizontal/upward impulse**, strong **linear/angular damp**, and mostly **fall downward** — a fast body collapse, not a far-flinging explosion. Only ~18% pop slightly upward.
-4. Dark blood mist at center; chunks tumble nearby, then despawn after **3–4 s**.
-5. Hide live fighter; **no full corpse**. Score after **1.8–2.2 s** (`GameBalance.gib_collapse_score_sec()`); normal kills still use **2.5 s**.
-6. Gibs: group **`gib_chunk`**, layer **8** — weapons ignore them; cleared at round start.
-7. **Player** heavy kill: screen shake, camera stays active, HUD **`YOU WERE OBLITERATED`**.
-8. **Enemy** heavy kill: debug `Enemy gibbed by rocket`.
+**Direction rules:** projectile deaths use `last_hit_direction`; explosions use vector from `last_explosion_origin` to body; forces scaled by `last_hit_force`.
 
-Tuning lives in `game_balance.gd` (`GIB_HORIZONTAL_FORCE_*`, `GIB_UPWARD_FORCE_*`, `GIB_LINEAR_DAMP`, etc.).
+Tuning: `game_balance.gd` — `DISMEMBER_HORIZONTAL_FORCE_*` (**8–22**), upward **2–8**, torque **5–16**, max speed **28**, lifetime **5–8 s**. Groups: **`dismembered_body_part`**, **`gib_chunk`** (small parts). Cap **72** active pieces.
 
-Debug: `Gib collapse spawned X chunks`, `Gib collapse finished`, `Death sequence finished, scoring`.
+**Player HUD:** `YOU WERE TORN APART` (shotgun / railgun shred) or `YOU WERE OBLITERATED` (rocket/explosion/heavy). Stronger camera shake on rocket/shotgun dismemberment.
 
-Gib chunks and corpses are cleared at round start with projectiles/void effects.
+**Enemy debug:** `Enemy dismembered by bazooka` / `shotgun` / `railgun`.
+
+Debug: `Dismemberment spawned: profile=… parts=… gibs=…`, `Dismemberment sequence finished`.
+
+Gore cleared at round start via `DismembermentSpawner.clear_all()`.
 
 ### Void death spectacle
 

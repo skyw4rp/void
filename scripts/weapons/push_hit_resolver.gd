@@ -225,7 +225,13 @@ static func apply_damage_to_target(
 		return
 	var stats: CombatStats = body.get_node_or_null("CombatStats") as CombatStats
 	if stats:
-		stats.record_hit(direction, force, attacker, source)
+		var explosion_origin: Vector3 = Vector3(INF, INF, INF)
+		if source == "bazooka_explosion" and hit_world.length_squared() > 0.001:
+			explosion_origin = hit_world
+		var hit_pos: Vector3 = Vector3(INF, INF, INF)
+		if hit_world.length_squared() > 0.001:
+			hit_pos = hit_world
+		stats.record_hit(direction, force, attacker, source, explosion_origin, hit_pos)
 		var shield_before: int = stats.shield
 		var health_before: int = stats.health
 		stats.apply_damage(amount, attacker)
@@ -444,7 +450,8 @@ static func apply_explosion_hit(
 					attacker,
 					blast_dir,
 					horizontal_force,
-					"bazooka_explosion"
+					"bazooka_explosion",
+					origin
 				)
 	return handled
 

@@ -1,12 +1,19 @@
-## 1v1 arena AI — compact arenas, cover, hole avoidance, ring-out tactics.
+## Elite VOID gladiator AI — predatory arena movement, cover, ring-out tactics.
 extends RigidBody3D
 
-enum AiState { ATTACKING, RECOVERING, IN_COVER }
+enum AiState { HUNTING, PRESSURING, EVADING, RECOVERING, EXECUTING, IN_COVER }
 
-@export var move_force: float = 10.0
-@export var strafe_force: float = 8.0
+@export var move_force: float = 12.5
+@export var strafe_force: float = 9.5
 @export var retreat_force: float = 12.0
-@export var max_speed: float = 5.0
+@export var burst_push_force: float = 18.0
+@export var max_speed: float = 6.5
+@export var micro_strafe_interval_min: float = 0.5
+@export var micro_strafe_interval_max: float = 1.05
+@export var combat_state_change_interval: float = 0.45
+@export var dodge_chance_hunt: float = 0.08
+@export var dodge_chance_evade: float = 0.28
+@export var debug_ai_movement: bool = false
 @export var void_y: float = -20.0
 @export var aim_height_offset: float = 1.2
 
@@ -36,24 +43,38 @@ enum AiState { ATTACKING, RECOVERING, IN_COVER }
 @export var bazooka_fire_interval_max: float = 1.2
 @export var bazooka_pick_chance_aggressive: float = 0.4
 @export var bazooka_pick_chance_medium: float = 0.26
-@export var knockback_recovery_speed: float = 7.5
-@export var recovery_duration_min: float = 0.8
-@export var recovery_duration_max: float = 1.2
+@export var knockback_recovery_speed: float = 10.0
+@export var recovery_duration_min: float = 0.55
+@export var recovery_duration_max: float = 0.9
+@export var recovery_reentry_cooldown: float = 1.5
+@export var stale_reposition_sec: float = 3.0
+@export var debug_ai_fire: bool = false
 
 @onready var _humanoid_visual: Node3D = $HumanoidVisual
-@onready var _weapon_pivot: Node3D = $WeaponPivot
-@onready var _weapons: Node3D = $WeaponPivot/EnemyWeaponManager
+@onready var _animator: ProceduralEnemyAnimator = $HumanoidVisual/ProceduralEnemyAnimator
+@onready var _look_at: EnemyLookAtController = $HumanoidVisual/EnemyLookAtController
+@onready var _weapon_mount: Node3D = $HumanoidVisual/WeaponMount
+@onready var _weapons: EnemyWeaponManager = $HumanoidVisual/WeaponMount/EnemyWeaponManager
 @onready var combat_stats: CombatStats = $CombatStats
 
 var _player: Node3D
+var _current_aim_target: Node3D
+var _last_valid_weapon_aim_position: Vector3 = Vector3.ZERO
+var _last_valid_head_aim_position: Vector3 = Vector3.ZERO
+var _has_valid_aim_target: bool = false
 var _spawn_position: Vector3 = Vector3.ZERO
 var _void_reported: bool = false
 var _game_manager: Node
 
-var _state: AiState = AiState.ATTACKING
+var _state: AiState = AiState.HUNTING
 var _recovery_timer: float = 0.0
 var _strafe_sign: float = 1.0
-var _direction_change_timer: float = 1.5
+var _direction_change_timer: float = 0.6
+var _burst_push_timer: float = 0.0
+var _state_change_cooldown: float = 0.0
+var _player_airborne_timer: float = 0.0
+var _dodge: CombatDodge = CombatDodge.new()
+var _rng: RandomNumberGenerator = RandomNumberGenerator.new()
 var _weapon_shuffle_timer: float = 5.0
 var _fire_attempt_timer: float = 0.5
 var _avoiding_edge_logged: bool = false
@@ -65,10 +86,15 @@ var _arena_generator: ArenaGenerator
 var _arena_walls: Array[Node3D] = []
 var _cover_timer: float = 0.0
 var _cover_duration: float = 0.0
+var _recovery_reentry_timer: float = 0.0
+var _time_since_last_shot: float = 0.0
+var _last_fire_block_reason: String = ""
+var _edge_zone_logged: int = -1
 
 const CORPSE_ALBEDO: Color = Color(0.2, 0.1, 0.12)
 const WALL_GROUP: String = "arena_wall"
 const CORPSE_EMISSION: Color = Color(0.55, 0.14, 0.08)
+const HEAD_AIM_HEIGHT: float = 1.45
 
 
 func _ready() -> void:
@@ -76,9 +102,15 @@ func _ready() -> void:
 	_spawn_position = global_position
 	_game_manager = get_tree().get_first_node_in_group("game_manager")
 	_player = get_tree().get_first_node_in_group("player") as Node3D
+	_rng.randomize()
+	_dodge.dodge_distance = 2.0
+	_dodge.dodge_duration = 0.14
+	_dodge.dodge_cooldown = 1.35
 	_reset_timers()
-	_set_state(AiState.ATTACKING)
+	_set_state(AiState.HUNTING)
 	combat_stats.died.connect(_on_combat_died)
+	refresh_target_references()
+	force_visual_aim_refresh()
 
 
 func take_damage(
@@ -92,22 +124,41 @@ func take_damage(
 		return
 	combat_stats.record_hit(direction, force, attacker, source)
 	combat_stats.apply_damage(amount, attacker)
+	if _animator:
+		_animator.notify_hit()
+	if _look_at:
+		_look_at.notify_hit_flinch()
+
+
+func _integrate_forces(state: PhysicsDirectBodyState3D) -> void:
+	if _death_handled or _void_dying:
+		return
+	state.angular_velocity = Vector3.ZERO
+	var euler: Vector3 = state.transform.basis.get_euler(EULER_ORDER_YXZ)
+	state.transform = Transform3D(
+		Basis.from_euler(Vector3(0.0, euler.y, 0.0)),
+		state.transform.origin
+	)
 
 
 func _on_combat_died(_attacker: Node) -> void:
 	if _death_handled:
 		return
 	_death_handled = true
-	var heavy: bool = combat_stats.is_heavy_death()
+	var dismember: bool = combat_stats.is_dismemberment_death()
+	if _animator:
+		_animator.begin_death()
+	var death_pause: float = 0.14 if dismember else 0.32
+	await get_tree().create_timer(death_pause).timeout
 	var world: Node = get_tree().current_scene
-	if heavy:
-		print("Enemy gibbed by rocket")
-		GibSpawner.play_heavy_death(
+	if dismember:
+		DismembermentSpawner.play_from_stats(
 			world,
 			get_death_gib_position(),
-			combat_stats.last_hit_direction,
-			combat_stats.get_corpse_launch_force(),
-			combat_stats.last_damage_source
+			combat_stats,
+			Color(0.2, 0.04, 0.06),
+			Color(0.09, 0.09, 0.11),
+			true
 		)
 	else:
 		print("Enemy corpse spawned")
@@ -115,7 +166,7 @@ func _on_combat_died(_attacker: Node) -> void:
 	_hide_live_fighter()
 	_enter_death_hidden_state()
 	if _game_manager and _game_manager.has_method("on_health_death"):
-		_game_manager.on_health_death(false, heavy)
+		_game_manager.on_health_death(false, dismember, combat_stats)
 
 
 func get_death_gib_position() -> Vector3:
@@ -170,9 +221,9 @@ func _exit_death_hidden_state() -> void:
 	freeze = false
 	gravity_scale = 1.0
 	_show_live_fighter()
-	var pivot: Node3D = get_node_or_null("WeaponPivot") as Node3D
-	if pivot:
-		pivot.visible = true
+	var mount: Node3D = get_node_or_null("HumanoidVisual/WeaponMount") as Node3D
+	if mount:
+		mount.visible = true
 
 
 func is_void_dying() -> bool:
@@ -205,12 +256,16 @@ func get_void_breakup_position() -> Vector3:
 
 func hide_for_void_breakup() -> void:
 	_set_fighter_meshes_visible(false)
-	var pivot: Node3D = get_node_or_null("WeaponPivot") as Node3D
-	if pivot:
-		pivot.visible = false
+	var mount: Node3D = get_node_or_null("HumanoidVisual/WeaponMount") as Node3D
+	if mount:
+		mount.visible = false
 
 
 func _physics_process(delta: float) -> void:
+	if not _death_handled:
+		_update_aim_cache()
+		_push_visual_aim()
+
 	if _death_handled:
 		return
 
@@ -235,27 +290,39 @@ func _physics_process(delta: float) -> void:
 		angular_velocity = Vector3.ZERO
 		return
 
-	if _player == null or not is_instance_valid(_player):
-		_player = get_tree().get_first_node_in_group("player") as Node3D
+	if not _has_valid_aim_target:
 		return
+
+	_player = _current_aim_target
 
 	_update_recovery(delta)
 	_detect_knockback_recovery()
+	_dodge.tick(delta)
+	_track_player_aerial(delta)
 
 	var offset: Vector3 = _offset_from_center()
 	var to_player: Vector3 = _player.global_position - global_position
 	var horizontal_to_player: Vector3 = Vector3(to_player.x, 0.0, to_player.z)
 	var distance_to_player: float = horizontal_to_player.length()
 
-	if _is_past_danger(offset):
-		_enter_recovery()
+	_recovery_reentry_timer = maxf(0.0, _recovery_reentry_timer - delta)
+	_time_since_last_shot += delta
+	_log_edge_zone_change(offset)
 
-	_aim_at_player()
+	_try_hard_edge_recovery(offset)
+
+	_state_change_cooldown = maxf(0.0, _state_change_cooldown - delta)
+	_update_combat_state(distance_to_player, offset)
 
 	if _state == AiState.RECOVERING:
 		_apply_edge_safety_forces(offset, true)
 		_apply_hole_avoidance()
-		_move_toward_center(edge_avoid_force * 1.2)
+		_move_toward_center(edge_avoid_force * 1.35)
+		if horizontal_to_player.length_squared() > 0.05:
+			var recover_strafe: Vector3 = (
+				horizontal_to_player.normalized().cross(Vector3.UP) * _strafe_sign
+			)
+			apply_central_force(recover_strafe * strafe_force * 0.35)
 		_clamp_horizontal_speed()
 		_prev_horizontal_speed = _horizontal_speed()
 		return
@@ -271,13 +338,16 @@ func _physics_process(delta: float) -> void:
 		_prev_horizontal_speed = _horizontal_speed()
 		return
 
-	if not _is_past_safe(offset):
+	if _edge_zone(offset) == 0:
 		_avoiding_edge_logged = false
+		_edge_zone_logged = -1
 
 	_apply_edge_safety_forces(offset, false)
 	_apply_hole_avoidance()
 	_try_enter_cover(distance_to_player, offset)
 	_update_combat_movement(delta, horizontal_to_player, distance_to_player, offset)
+	if _time_since_last_shot >= stale_reposition_sec:
+		_force_reposition(horizontal_to_player, distance_to_player, offset)
 	_update_weapon_ai(delta, distance_to_player, offset)
 	_update_cover_state(delta, offset)
 
@@ -308,8 +378,103 @@ func arena_respawn(spawn_position: Vector3) -> void:
 	_avoiding_edge_logged = false
 	_show_live_fighter()
 	_exit_death_hidden_state()
+	_dodge.reset()
+	_player_airborne_timer = 0.0
+	_recovery_reentry_timer = 0.0
+	_time_since_last_shot = 0.0
+	_edge_zone_logged = -1
 	_reset_timers()
-	_set_state(AiState.ATTACKING)
+	_set_state(AiState.HUNTING)
+	if _animator:
+		_animator.reset_pose()
+	if _look_at:
+		_look_at.reset_aim()
+	if _weapon_mount and _weapon_mount.has_method("reset_mount"):
+		_weapon_mount.reset_mount()
+	refresh_target_references()
+	force_visual_aim_refresh()
+
+
+func refresh_target_references() -> void:
+	if _current_aim_target == null or not is_instance_valid(_current_aim_target):
+		_current_aim_target = get_tree().get_first_node_in_group("player") as Node3D
+	_player = _current_aim_target
+
+
+func force_visual_aim_refresh() -> void:
+	refresh_target_references()
+	_update_aim_cache()
+	_push_visual_aim()
+	if _look_at:
+		_look_at.begin_round()
+		_look_at.apply_aim_positions(
+			_last_valid_weapon_aim_position,
+			_last_valid_head_aim_position,
+			true
+		)
+	if not _has_valid_aim_target and _look_at:
+		_look_at.warn_no_target_this_round_once()
+
+
+func _update_aim_cache() -> void:
+	refresh_target_references()
+	if _current_aim_target != null and is_instance_valid(_current_aim_target):
+		var base: Vector3 = _current_aim_target.global_position
+		_last_valid_weapon_aim_position = base + Vector3(0.0, aim_height_offset, 0.0)
+		_last_valid_head_aim_position = base + Vector3(0.0, HEAD_AIM_HEIGHT, 0.0)
+		_has_valid_aim_target = true
+	_player = _current_aim_target
+
+
+func has_valid_aim_target() -> bool:
+	return _has_valid_aim_target and _last_valid_weapon_aim_position != Vector3.ZERO
+
+
+func get_aim_target() -> Node3D:
+	return _current_aim_target
+
+
+func get_weapon_aim_position() -> Vector3:
+	return _last_valid_weapon_aim_position
+
+
+func get_head_aim_position() -> Vector3:
+	return _last_valid_head_aim_position
+
+
+func get_muzzle_global_position() -> Vector3:
+	if _weapon_mount and _weapon_mount.has_method("get_muzzle_global_position"):
+		return _weapon_mount.get_muzzle_global_position()
+	if _weapons:
+		return _weapons.get_muzzle_global_position()
+	return global_position
+
+
+func get_weapon_forward() -> Vector3:
+	if _weapon_mount and _weapon_mount.has_method("get_weapon_forward"):
+		return _weapon_mount.get_weapon_forward()
+	return Vector3.FORWARD
+
+
+func align_weapon_to_target(world_target: Vector3, snap: bool = false) -> void:
+	if _weapon_mount == null or not _weapon_mount.has_method("align_to_target"):
+		return
+	var locked: bool = _look_at.is_shooting_active() if _look_at else false
+	_weapon_mount.align_to_target(world_target, snap, locked)
+
+
+func _push_visual_aim() -> void:
+	if _look_at == null:
+		return
+	var move_dir: Vector3 = Vector3(linear_velocity.x, 0.0, linear_velocity.z)
+	var shooting: bool = _animator.is_shooting() if _animator else false
+	_look_at.feed(
+		_last_valid_weapon_aim_position,
+		_last_valid_head_aim_position,
+		move_dir,
+		_state as int,
+		shooting
+	)
 
 
 func _is_low_combat() -> bool:
@@ -328,6 +493,27 @@ func _is_past_safe(offset: Vector3) -> bool:
 
 func _is_past_danger(offset: Vector3) -> bool:
 	return absf(offset.x) >= danger_half_x or absf(offset.z) >= danger_half_z
+
+
+## 0 = safe, 1 = soft (past safe), 2 = hard (past danger).
+func _edge_zone(offset: Vector3) -> int:
+	if _is_past_danger(offset):
+		return 2
+	if _is_past_safe(offset):
+		return 1
+	return 0
+
+
+func _log_edge_zone_change(offset: Vector3) -> void:
+	var zone: int = _edge_zone(offset)
+	if zone == _edge_zone_logged:
+		return
+	_edge_zone_logged = zone
+	if zone == 1 and not _avoiding_edge_logged:
+		print("Enemy soft edge steer")
+		_avoiding_edge_logged = true
+	elif zone == 2:
+		print("Enemy hard edge recover")
 
 
 func _edge_risk_factor(offset: Vector3) -> float:
@@ -350,28 +536,116 @@ func _outward_from_arena(pos_offset: Vector3) -> Vector3:
 func _reset_timers() -> void:
 	_weapon_shuffle_timer = randf_range(weapon_shuffle_min, weapon_shuffle_max)
 	_fire_attempt_timer = randf_range(fire_attempt_interval_min, fire_attempt_interval_max)
-	_direction_change_timer = randf_range(1.0, 2.0)
-	_strafe_sign = 1.0 if randf() > 0.5 else -1.0
+	_direction_change_timer = randf_range(micro_strafe_interval_min, micro_strafe_interval_max)
+	_burst_push_timer = randf_range(0.8, 2.0)
+	_strafe_sign = 1.0 if _rng.randf() > 0.5 else -1.0
 
 
-func _set_state(new_state: AiState) -> void:
+func _set_state(new_state: AiState, ignore_cooldown: bool = false) -> void:
 	if _state == new_state:
 		return
+	var combat_states: Array = [
+		AiState.HUNTING, AiState.PRESSURING, AiState.EVADING, AiState.EXECUTING,
+	]
+	if (
+		not ignore_cooldown
+		and _state in combat_states
+		and new_state in combat_states
+		and _state_change_cooldown > 0.0
+	):
+		return
 	_state = new_state
+	if _animator:
+		_animator.set_combat_state(new_state as int)
+		_animator.set_strafe_sign(_strafe_sign)
+	if new_state in combat_states:
+		_state_change_cooldown = combat_state_change_interval
 	match new_state:
-		AiState.ATTACKING:
-			print("Enemy state: ATTACKING")
+		AiState.HUNTING:
+			print("Enemy state: HUNTING")
+		AiState.PRESSURING:
+			print("Enemy state: PRESSURING")
+		AiState.EVADING:
+			print("Enemy state: EVADING")
 		AiState.RECOVERING:
 			print("Enemy state: RECOVERING")
+		AiState.EXECUTING:
+			print("Enemy state: EXECUTING")
 		AiState.IN_COVER:
 			print("Enemy state: IN_COVER")
 
 
-func _enter_recovery() -> void:
+func _update_combat_state(distance: float, offset: Vector3) -> void:
+	if _state == AiState.RECOVERING or _state == AiState.IN_COVER:
+		return
+	if _is_low_combat():
+		_set_state(AiState.EVADING)
+		return
+	if _is_player_executing():
+		_set_state(AiState.EXECUTING)
+		return
+	if _should_pressure_player(offset, distance):
+		_set_state(AiState.PRESSURING)
+		return
+	if _state in [AiState.EVADING, AiState.EXECUTING, AiState.PRESSURING]:
+		_set_state(AiState.HUNTING)
+
+
+func _is_player_executing() -> bool:
+	var p_stats: CombatStats = _get_player_combat_stats()
+	if p_stats == null:
+		return false
+	return p_stats.health <= 35 or (p_stats.health <= 55 and p_stats.shield <= 10)
+
+
+func _should_pressure_player(offset: Vector3, distance: float) -> bool:
+	if _has_ringout_shot_angle():
+		return true
+	var player_offset: Vector3 = _player.global_position - arena_center
+	player_offset.y = 0.0
+	if _is_past_safe(player_offset):
+		return true
+	return distance < ideal_distance_max + 2.0 and not _is_past_safe(offset)
+
+
+func _get_player_combat_stats() -> CombatStats:
+	if _player == null:
+		return null
+	return _player.get_node_or_null("CombatStats") as CombatStats
+
+
+func _track_player_aerial(delta: float) -> void:
+	if _player is CharacterBody3D:
+		var body: CharacterBody3D = _player as CharacterBody3D
+		if not body.is_on_floor() and body.velocity.y > 5.0:
+			_player_airborne_timer = 1.35
+			return
+	_player_airborne_timer = maxf(0.0, _player_airborne_timer - delta)
+
+
+func _try_ai_dodge_burst(flat_direction: Vector3) -> void:
+	var chance: float = dodge_chance_evade if _state == AiState.EVADING else dodge_chance_hunt
+	var result: Dictionary = _dodge.try_ai_dodge(flat_direction, chance, _rng)
+	if not result.get("triggered", false):
+		return
+	var boost: Vector3 = _dodge.get_active_velocity_boost()
+	if boost.length_squared() > 0.01:
+		apply_central_impulse(boost * mass * 0.85)
+
+
+func _enter_recovery(skip_reentry_cooldown: bool = false) -> void:
 	if _state == AiState.RECOVERING:
 		return
+	if not skip_reentry_cooldown and _recovery_reentry_timer > 0.0:
+		return
 	_recovery_timer = randf_range(recovery_duration_min, recovery_duration_max)
-	_set_state(AiState.RECOVERING)
+	_set_state(AiState.RECOVERING, true)
+
+
+func _try_hard_edge_recovery(offset: Vector3) -> void:
+	if _edge_zone(offset) < 2:
+		return
+	_enter_recovery(true)
 
 
 func _update_recovery(delta: float) -> void:
@@ -379,14 +653,55 @@ func _update_recovery(delta: float) -> void:
 		return
 	_recovery_timer -= delta
 	if _recovery_timer <= 0.0:
-		_set_state(AiState.ATTACKING)
+		_set_state(AiState.HUNTING)
+		_recovery_reentry_timer = recovery_reentry_cooldown
 		_avoiding_edge_logged = false
 
 
 func _detect_knockback_recovery() -> void:
+	if _recovery_reentry_timer > 0.0:
+		return
 	var speed: float = _horizontal_speed()
 	if speed - _prev_horizontal_speed > knockback_recovery_speed:
-		_enter_recovery()
+		_enter_recovery(false)
+
+
+func _force_reposition(
+	horizontal_to_player: Vector3, distance: float, offset: Vector3
+) -> void:
+	if horizontal_to_player.length_squared() < 0.05:
+		_apply_idle_strafe()
+		_time_since_last_shot = 0.0
+		return
+	var to_player_dir: Vector3 = horizontal_to_player.normalized()
+	if not _has_line_of_sight_to_player():
+		_apply_cover_seek_force()
+		apply_central_force(to_player_dir * move_force * 0.65)
+	else:
+		var strafe_dir: Vector3 = to_player_dir.cross(Vector3.UP).normalized() * _strafe_sign
+		apply_central_force(strafe_dir * strafe_force * 1.1)
+		if distance > ideal_distance_max and _edge_zone(offset) == 0:
+			apply_central_force(to_player_dir * move_force * 0.5)
+	_time_since_last_shot = 0.0
+
+
+func _fire_block_reason(offset: Vector3) -> String:
+	if _state == AiState.RECOVERING:
+		return "recovering"
+	if _edge_zone(offset) >= 2:
+		return "extreme_edge"
+	if _game_manager and _game_manager.has_method("is_fighting") and not _game_manager.is_fighting():
+		return "not_fighting"
+	return ""
+
+
+func _log_fire_blocked(reason: String) -> void:
+	if not debug_ai_fire or reason == "":
+		return
+	if reason == _last_fire_block_reason:
+		return
+	_last_fire_block_reason = reason
+	print("AI fire blocked: %s" % reason)
 
 
 func _direction_to_center() -> Vector3:
@@ -410,16 +725,11 @@ func _apply_edge_safety_forces(offset: Vector3, recovery_mode: bool) -> void:
 	var strength_mult: float = 1.4 if recovery_mode else 1.0
 	var risk: float = _edge_risk_factor(offset)
 
-	if _is_past_danger(offset):
-		if not _avoiding_edge_logged:
-			print("Enemy avoiding edge")
-			_avoiding_edge_logged = true
-		apply_central_force(to_center * edge_avoid_force * strength_mult)
-	elif _is_past_safe(offset):
-		if not _avoiding_edge_logged:
-			print("Enemy avoiding edge")
-			_avoiding_edge_logged = true
-		apply_central_force(to_center * edge_avoid_force * risk * strength_mult)
+	var zone: int = _edge_zone(offset)
+	if zone >= 2:
+		apply_central_force(to_center * edge_avoid_force * strength_mult * 1.25)
+	elif zone == 1:
+		apply_central_force(to_center * edge_avoid_force * risk * strength_mult * 0.65)
 
 	var vel_h: Vector3 = Vector3(linear_velocity.x, 0.0, linear_velocity.z)
 	if _is_past_safe(offset) and vel_h.length_squared() > 0.5:
@@ -442,8 +752,10 @@ func _update_combat_movement(
 ) -> void:
 	_direction_change_timer -= delta
 	if _direction_change_timer <= 0.0:
-		_strafe_sign = -_strafe_sign if randf() > 0.25 else _strafe_sign
-		_direction_change_timer = randf_range(1.0, 2.0)
+		_strafe_sign = -_strafe_sign if _rng.randf() > 0.2 else _strafe_sign
+		_direction_change_timer = randf_range(micro_strafe_interval_min, micro_strafe_interval_max)
+		if _animator:
+			_animator.set_strafe_sign(_strafe_sign)
 
 	if horizontal_to_player.length_squared() < 0.05:
 		_apply_idle_strafe()
@@ -451,28 +763,66 @@ func _update_combat_movement(
 
 	var to_player_dir: Vector3 = horizontal_to_player.normalized()
 	var strafe_dir: Vector3 = to_player_dir.cross(Vector3.UP).normalized() * _strafe_sign
-	var near_edge: bool = _is_past_safe(offset)
-	var can_chase_forward: bool = not near_edge and _floor_ahead(to_player_dir)
-	var evasive: bool = _is_low_combat()
-	var retreat_scale: float = 1.35 if evasive else 1.0
-	var strafe_scale: float = 1.2 if evasive else 1.0
+	_try_ai_dodge_burst(strafe_dir)
 
-	if distance < ideal_distance_min or evasive:
+	var edge: int = _edge_zone(offset)
+	var player_in_air: bool = _player_airborne_timer > 0.0
+	var can_chase_forward: bool = not player_in_air and _floor_ahead(to_player_dir)
+	var move_scale: float = 1.0
+	var strafe_scale: float = 1.0
+	var retreat_scale: float = 1.0
+
+	if edge == 1:
+		move_scale *= 0.75
+		strafe_scale *= 1.05
+	elif edge == 2:
+		move_scale *= 0.45
+
+	match _state:
+		AiState.EVADING:
+			retreat_scale = 1.55
+			strafe_scale = 1.45
+			move_scale = 0.35
+		AiState.PRESSURING:
+			move_scale = 1.35
+			strafe_scale = 0.85
+		AiState.EXECUTING:
+			move_scale = 1.5
+			strafe_scale = 1.1
+		AiState.HUNTING:
+			strafe_scale = 1.15
+
+	if player_in_air:
+		move_scale *= 0.45
+		strafe_scale *= 1.35
+
+	_burst_push_timer -= delta
+	if _state == AiState.PRESSURING and _burst_push_timer <= 0.0 and can_chase_forward:
+		apply_central_force(to_player_dir * burst_push_force)
+		_burst_push_timer = randf_range(1.4, 2.6)
+
+	if distance < ideal_distance_min or _state == AiState.EVADING:
 		apply_central_force(-to_player_dir * retreat_force * retreat_scale)
-		apply_central_force(strafe_dir * strafe_force * 0.65 * strafe_scale)
+		apply_central_force(strafe_dir * strafe_force * 0.75 * strafe_scale)
 	elif distance > ideal_distance_max:
-		if can_chase_forward and _floor_ahead(to_player_dir):
-			apply_central_force(to_player_dir * move_force)
+		if can_chase_forward:
+			apply_central_force(to_player_dir * move_force * move_scale)
 		elif not _has_line_of_sight_to_player():
 			_apply_cover_seek_force()
 		_move_toward_center(edge_avoid_force * 0.35)
-		apply_central_force(strafe_dir * strafe_force * 0.45 * strafe_scale)
+		apply_central_force(strafe_dir * strafe_force * 0.55 * strafe_scale)
 	else:
 		if not _has_line_of_sight_to_player() and distance > close_range:
 			_apply_cover_seek_force()
 		apply_central_force(strafe_dir * strafe_force * strafe_scale)
-		if _floor_ahead(to_player_dir):
-			apply_central_force(to_player_dir * move_force * 0.25)
+		if can_chase_forward:
+			apply_central_force(to_player_dir * move_force * 0.35 * move_scale)
+
+	if debug_ai_movement:
+		print(
+			"AI spd=%.1f state=%d dodge_cd=%.2f"
+			% [_horizontal_speed(), _state, _dodge.get_cooldown_remaining()]
+		)
 
 
 func _apply_idle_strafe() -> void:
@@ -510,7 +860,7 @@ func _update_weapon_ai(delta: float, distance: float, offset: Vector3) -> void:
 		_fire_attempt_timer = maxf(
 			_fire_attempt_timer, randf_range(bazooka_fire_interval_min, bazooka_fire_interval_max)
 		)
-	_try_shot()
+	_try_shot(offset)
 
 
 func _choose_weapon(distance: float, enemy_offset: Vector3) -> WeaponDefs.Id:
@@ -564,7 +914,7 @@ func _has_line_of_sight_to_player() -> bool:
 	var space: PhysicsDirectSpaceState3D = get_world_3d().direct_space_state
 	if space == null:
 		return true
-	var origin: Vector3 = _weapon_pivot.global_position
+	var origin: Vector3 = get_muzzle_global_position()
 	var target: Vector3 = _player.global_position + Vector3(0.0, aim_height_offset * 0.6, 0.0)
 	var query := PhysicsRayQueryParameters3D.create(origin, target)
 	query.collision_mask = 1
@@ -635,9 +985,9 @@ func _pick_cover_direction() -> Vector3:
 
 
 func _try_enter_cover(distance: float, offset: Vector3) -> void:
-	if _state != AiState.ATTACKING:
+	if _state != AiState.HUNTING:
 		return
-	if _is_past_safe(offset) or _is_low_combat():
+	if _edge_zone(offset) >= 2 or _is_low_combat():
 		return
 	if distance < close_range + 1.0:
 		return
@@ -652,19 +1002,19 @@ func _try_enter_cover(distance: float, offset: Vector3) -> void:
 func _enter_cover() -> void:
 	_cover_duration = randf_range(1.2, 2.4)
 	_cover_timer = _cover_duration
-	_set_state(AiState.IN_COVER)
+	_set_state(AiState.IN_COVER, true)
 
 
 func _update_cover_state(delta: float, offset: Vector3) -> void:
 	if _state != AiState.IN_COVER:
 		return
 	_cover_timer -= delta
-	if _cover_timer <= 0.0 or _is_past_danger(offset):
-		_set_state(AiState.ATTACKING)
+	if _cover_timer <= 0.0 or _edge_zone(offset) >= 2:
+		_set_state(AiState.HUNTING)
 		return
 	if _has_line_of_sight_to_player() and _cover_timer < _cover_duration * 0.35:
-		if randf() > 0.6:
-			_set_state(AiState.ATTACKING)
+		if _rng.randf() > 0.6:
+			_set_state(AiState.HUNTING)
 
 
 func _has_ringout_shot_angle() -> bool:
@@ -690,24 +1040,37 @@ func _report_void_fall() -> void:
 		_game_manager.report_enemy_void_fall()
 
 
-func _aim_at_player() -> void:
-	var target: Vector3 = _player.global_position + Vector3(0.0, aim_height_offset * 0.5, 0.0)
-	var pivot_pos: Vector3 = _weapon_pivot.global_position
-	var flat_dir: Vector3 = Vector3(target.x - pivot_pos.x, 0.0, target.z - pivot_pos.z)
-	if flat_dir.length_squared() < 0.01:
+func _try_shot(offset: Vector3) -> void:
+	var block: String = _fire_block_reason(offset)
+	if block != "":
+		_log_fire_blocked(block)
 		return
-	_weapon_pivot.look_at(pivot_pos + flat_dir.normalized(), Vector3.UP)
+	if not _weapons.can_fire():
+		_log_fire_blocked("weapon_cooldown")
+		return
+	if not has_valid_aim_target():
+		_log_fire_blocked("no_aim_target")
+		return
 
-
-func _try_shot() -> void:
-	var aim_point: Vector3 = _player.global_position + Vector3(0.0, aim_height_offset, 0.0)
+	var aim_point: Vector3 = _last_valid_weapon_aim_position
 	if _weapons.get_weapon() == WeaponDefs.Id.RAILGUN:
 		aim_point += _sample_railgun_aim_error()
-	var origin: Vector3 = _weapon_pivot.global_position
-	var direction: Vector3 = (aim_point - origin).normalized()
+	align_weapon_to_target(aim_point, true)
+	if _look_at:
+		_look_at.trigger_aim_lock(0.25)
+	var origin: Vector3 = get_muzzle_global_position()
+	var direction: Vector3 = get_weapon_forward()
 	if direction.length_squared() < 0.01:
+		direction = (aim_point - origin).normalized()
+	if direction.length_squared() < 0.01:
+		_log_fire_blocked("bad_aim")
 		return
-	_weapons.try_fire(origin, direction, _weapon_pivot.global_transform.basis)
+	var aim_basis: Basis = Basis.looking_at(direction, Vector3.UP)
+	if _weapons.try_fire(origin, direction, aim_basis):
+		_time_since_last_shot = 0.0
+		_last_fire_block_reason = ""
+		if debug_ai_fire:
+			print("Enemy firing with visual target synced")
 
 
 func _sample_railgun_aim_error() -> Vector3:
@@ -718,6 +1081,9 @@ func _sample_railgun_aim_error() -> Vector3:
 func _clamp_horizontal_speed() -> void:
 	var vel: Vector3 = linear_velocity
 	var horizontal: Vector3 = Vector3(vel.x, 0.0, vel.z)
-	if horizontal.length() > max_speed:
-		horizontal = horizontal.normalized() * max_speed
+	var cap: float = max_speed
+	if _dodge.is_active():
+		cap = max_speed * 1.22
+	if horizontal.length() > cap:
+		horizontal = horizontal.normalized() * cap
 		linear_velocity = Vector3(horizontal.x, vel.y, horizontal.z)

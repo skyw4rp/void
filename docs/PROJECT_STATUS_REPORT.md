@@ -60,7 +60,7 @@ This document reflects what exists in the repository today, not planned features
 
 1. `CombatStats.died` → fighter hides, death FX.
 2. **Normal death** — physics corpse, score after **2.5 s** (`KILL_DEATH_VIEW_SEC`).
-3. **Heavy death** — collapse flash, gib chunks, score after **1.8–2.2 s** (`gib_collapse_score_sec()`).
+3. **Dismemberment death** — directional body parts + gibs (`dismemberment_spawner.gd`), score after **2.4 s** (`DISMEMBER_VIEW_SEC`).
 
 ### Respawn / next round
 
@@ -111,7 +111,7 @@ This document reflects what exists in the repository today, not planned features
 
 Shared stack: `WeaponDefs` → `WeaponFiring` → `PushHitResolver` → `CombatStats` / `damage_cover` / RigidBody impulses.
 
-Player: `WeaponManager` on camera. Enemy: `EnemyWeaponManager` on weapon pivot.
+Player: `WeaponManager` on camera. Enemy: `EnemyWeaponManager` under `HumanoidVisual/WeaponMount` (`EnemyWeaponMount`); one visible weapon view at a time; fire from each view’s `Muzzle` along mount **-Z**.
 
 ### Railgun (slot 1)
 
@@ -228,10 +228,21 @@ Break → staged fracture (`wall_destruction.gd`): crack visual → brief hold �
 
 ### Enemy (`arena_opponent.gd`)
 
-- **Visual:** simple low-poly humanoid mesh hierarchy (dark armor, red/orange glow accents, emissive eyes/core).
+- **Visual:** `HumanoidVisual` — torso, head/eyes, arms, legs, chest `WeaponMount` with distinct railgun/shotgun/bazooka silhouettes (emissive tint per weapon).
+- **Weapon aim:** `enemy_weapon_mount.gd` — mount **-Z** = shot direction; `Muzzle` nodes at barrel tips; `align_weapon_to_target()` before `_try_shot()`.
+- **Procedural animation + aim:** hard-synced cached aim positions on `arena_opponent.gd`; combat cannot fire without valid visual aim feed. No skeletal rig.
 - **Physics:** `RigidBody3D` + capsule collider unchanged (mass **5**, linear damp **0.6**, axis-locked rotation).
+- **Gladiator AI states:** HUNTING, PRESSURING, EVADING, EXECUTING, RECOVERING, IN_COVER. Soft/hard edge zones — fight while steering inward; hard edge only blocks fire. Recovery re-entry cooldown **1.5 s**.
 - Knockback via impulses; recovery state after heavy hits / near edge.
 - Death corpse remains capsule placeholder tinted to match enemy armor/glow.
+
+### Player locomotion (`player.gd`, `scripts/movement/`)
+
+- Arena FPS movement (retuned): ~**7.6** ground / **9.0** air max speed; slightly lower accel/strafe boost.
+- Dodge: **Shift+direction** or double-tap WASD — **~2.05 u** burst, **~1.4 s** cooldown (`combat_dodge.gd`).
+- Camera: strafe tilt, speed FOV, landing shake (`gladiator_camera_feel.gd`).
+- **Weapon viewmodel:** `weapon_viewmodel_animator.gd` — sway, bob, recoil profiles, switch dip (visual only).
+- Audio hooks via signals (no SFX wired yet).
 
 ### Corpse launch (`physics_corpse.gd`)
 
@@ -266,7 +277,7 @@ Break → staged fracture (`wall_destruction.gd`): crack visual → brief hold �
 
 | State | Behavior |
 |-------|----------|
-| **ATTACKING** | Move, strafe, shoot, edge logic |
+| **HUNTING / PRESSURING / EVADING / EXECUTING** | Elite gladiator movement + combat states |
 | **RECOVERING** | **0.8–1.2 s** after heavy knockback or near rim; moves toward center; no shooting |
 
 ### Movement
@@ -302,21 +313,21 @@ Break → staged fracture (`wall_destruction.gd`): crack visual → brief hold �
 3. Hide live fighter.
 4. Score after **2.5 s**.
 
-### Heavy health death
+### Dismemberment death (`dismemberment_spawner.gd`, `body_part_chunk.gd`)
 
-Triggers: rocket direct/explosion, overkill ≥ **25**, single hit ≥ **40**.
+Triggers: `is_dismemberment_death()` — rockets, heavy overkill, shotgun ≥ **28** dmg, railgun overkill.
 
-1. `VoidDeathEffect.play_collapse_flash` (also used for gib intro).
-2. **0.1 s** delay (`GIB_COLLAPSE_SPAWN_DELAY_SEC`).
-3. **10–18** `gib_chunk` collapse pieces (local, low impulse).
-4. Player: screen shake + **"YOU WERE OBLITERATED"**.
-5. Score after **1.8–2.2 s**.
+- **4–7** large body parts + **8–18** small gibs; weapon-specific impulse profiles (directed / radial / beam).
+- Uses `last_hit_direction`, `last_hit_force`, `last_explosion_origin`, `last_damage_source`.
+- Player messages: **YOU WERE TORN APART** / **YOU WERE OBLITERATED** via `CombatStats.get_player_death_message()`.
+- No full corpse when dismembered. Max **72** active parts; cleared each round.
 
 ### Gibbing vs void gore chunks
 
 | System | Group | Use |
 |--------|-------|-----|
-| Combat gib | `gib_chunk` | Heavy kills |
+| Dismemberment | `dismembered_body_part` | Large parts |
+| Small combat gore | `gib_chunk` | Dismemberment splatter + legacy gib spawner |
 | Void pit gore | `gore_chunk` | VOID_GORE breakup at 2.2 s |
 | Cover break | `round_debris_fragment` | Destroyed cover |
 
@@ -552,7 +563,8 @@ neon-catacombs/
 
 | Feature | Status | Notes |
 |---------|--------|-------|
-| FPS movement (walk/sprint/jump) | Done | `player.gd` |
+| Gladiator locomotion + dodge | Done | `player.gd`, `scripts/movement/*` |
+| Procedural animation pass | Done | `scripts/animation/*` — no full character rig |
 | Mouse look | Done | |
 | Weapon switching (3 weapons) | Done | Keys 1–3 |
 | Railgun raycast | Done | Beam tracer |
@@ -568,6 +580,7 @@ neon-catacombs/
 | VOID_GORE void death | Done | Default |
 | Alt void death styles | Done | Config switch |
 | Normal death corpse | Done | 2.5 s delay |
+| Directional dismemberment | Done | Weapon profiles, body parts |
 | Heavy death gibbing | Done | 1.8–2.2 s delay |
 | ArenaGenerator | Done | 2 playable templates |
 | Spawn validation | Done | Raycast floor |

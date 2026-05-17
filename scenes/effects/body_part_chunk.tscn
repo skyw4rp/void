@@ -1,0 +1,29 @@
+[gd_scene load_steps=4 format=3 uid="uid://cbody_part_chunk01"]
+
+[ext_resource type="Script" path="res://scripts/effects/body_part_chunk.gd" id="1_script"]
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_part"]
+albedo_color = Color(0.22, 0.04, 0.06, 1)
+metallic = 0.25
+roughness = 0.88
+
+[sub_resource type="BoxMesh" id="BoxMesh_part"]
+size = Vector3(0.2, 0.35, 0.2)
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_part"]
+size = Vector3(0.2, 0.35, 0.2)
+
+[node name="BodyPartChunk" type="RigidBody3D"]
+collision_layer = 8
+collision_mask = 1
+mass = 1.2
+linear_damp = 1.4
+angular_damp = 2.0
+script = ExtResource("1_script")
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="."]
+material_override = SubResource("StandardMaterial3D_part")
+mesh = SubResource("BoxMesh_part")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="."]
+shape = SubResource("BoxShape3D_part")

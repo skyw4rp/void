@@ -28,6 +28,26 @@ const GIB_CLUSTER_RADIUS: float = 0.45
 const GIB_COUNT_MIN: int = 10
 const GIB_COUNT_MAX: int = 18
 
+## Dismemberment — directional body parts + small gibs.
+const DISMEMBER_HORIZONTAL_FORCE_MIN: float = 8.0
+const DISMEMBER_HORIZONTAL_FORCE_MAX: float = 22.0
+const DISMEMBER_UPWARD_FORCE_MIN: float = 2.0
+const DISMEMBER_UPWARD_FORCE_MAX: float = 8.0
+const DISMEMBER_TORQUE_MIN: float = 5.0
+const DISMEMBER_TORQUE_MAX: float = 16.0
+const DISMEMBER_MAX_BODY_PART_SPEED: float = 28.0
+const DISMEMBER_MAX_UPWARD_SPEED: float = 14.0
+const DISMEMBER_BODY_PART_MIN: int = 4
+const DISMEMBER_BODY_PART_MAX: int = 7
+const DISMEMBER_SMALL_GIB_MIN: int = 8
+const DISMEMBER_SMALL_GIB_MAX: int = 18
+const DISMEMBER_LIFETIME_MIN_SEC: float = 5.0
+const DISMEMBER_LIFETIME_MAX_SEC: float = 8.0
+const DISMEMBER_LINEAR_DAMP: float = 1.8
+const DISMEMBER_ANGULAR_DAMP: float = 2.4
+const DISMEMBER_VIEW_SEC: float = 2.4
+const DISMEMBER_MAX_ACTIVE_PARTS: int = 72
+
 ## VOID_GORE cinematic timeline (seconds from fall start).
 const VOID_GORE_INSTABILITY_SEC: float = 0.35
 const VOID_GORE_AMBIENT_AT: float = 0.7

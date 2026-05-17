@@ -22,6 +22,10 @@ var last_attacker: Node = null
 var last_damage_source: String = ""
 var last_damage_amount: int = 0
 var overkill_amount: int = 0
+var last_explosion_origin: Vector3 = Vector3.ZERO
+var has_last_explosion_origin: bool = false
+var last_hit_world_position: Vector3 = Vector3.ZERO
+var has_last_hit_world_position: bool = false
 
 
 func _ready() -> void:
@@ -37,12 +41,21 @@ func reset_combat_stats() -> void:
 	last_damage_source = ""
 	last_damage_amount = 0
 	overkill_amount = 0
+	last_explosion_origin = Vector3.ZERO
+	has_last_explosion_origin = false
+	last_hit_world_position = Vector3.ZERO
+	has_last_hit_world_position = false
 	stats_changed.emit(shield, health)
 	_log_stats()
 
 
 func record_hit(
-	direction: Vector3, force: float, attacker: Node = null, source: String = ""
+	direction: Vector3,
+	force: float,
+	attacker: Node = null,
+	source: String = "",
+	explosion_origin: Vector3 = Vector3(INF, INF, INF),
+	hit_world: Vector3 = Vector3(INF, INF, INF)
 ) -> void:
 	if direction.length_squared() > 0.001:
 		last_hit_direction = direction.normalized()
@@ -52,6 +65,12 @@ func record_hit(
 		last_attacker = attacker
 	if source != "":
 		last_damage_source = source
+	if explosion_origin.x < INF * 0.5:
+		last_explosion_origin = explosion_origin
+		has_last_explosion_origin = true
+	if hit_world.x < INF * 0.5:
+		last_hit_world_position = hit_world
+		has_last_hit_world_position = true
 
 
 func get_corpse_launch_force() -> float:
@@ -80,6 +99,45 @@ func is_heavy_death() -> bool:
 	if last_damage_amount >= HEAVY_DAMAGE_THRESHOLD:
 		return true
 	return false
+
+
+func is_dismemberment_death() -> bool:
+	if is_heavy_death():
+		return true
+	if last_damage_source == "shotgun" and last_damage_amount >= 28:
+		return true
+	if last_damage_source == "railgun" and overkill_amount >= 8:
+		return true
+	return false
+
+
+func get_dismemberment_profile() -> String:
+	match last_damage_source:
+		"bazooka_explosion":
+			return "explosion"
+		"bazooka_direct":
+			return "rocket_direct"
+		"shotgun":
+			return "shotgun"
+		"railgun":
+			return "railgun"
+		_:
+			return "heavy"
+
+
+func get_player_death_message() -> String:
+	match last_damage_source:
+		"shotgun":
+			return "YOU WERE TORN APART"
+		"bazooka_direct", "bazooka_explosion":
+			return "YOU WERE OBLITERATED"
+		"railgun":
+			if overkill_amount >= HEAVY_OVERKILL_THRESHOLD or last_damage_amount >= HEAVY_DAMAGE_THRESHOLD:
+				return "YOU WERE OBLITERATED"
+			return "YOU WERE TORN APART"
+	if is_heavy_death():
+		return "YOU WERE OBLITERATED"
+	return "You were eliminated!"
 
 
 func apply_damage(amount: int, attacker: Node = null) -> void:

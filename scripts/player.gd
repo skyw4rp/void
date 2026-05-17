@@ -1,16 +1,46 @@
-## First-person CharacterBody3D controller for the 1v1 arena prototype.
+## First-person CharacterBody3D — VOID gladiator arena locomotion (Quake/UT-inspired).
 extends CharacterBody3D
 
-const WALK_SPEED: float = 5.0
-const SPRINT_SPEED: float = 9.0
-const JUMP_VELOCITY: float = 4.5
+signal movement_dodged(direction: Vector3)
+signal movement_landed(impact_speed: float)
+signal movement_high_speed(speed: float)
+signal movement_heavy_impact(impact_speed: float)
+signal movement_air_accel()
+
+const JUMP_VELOCITY: float = 5.2
 const MOUSE_SENSITIVITY: float = 0.002
 
 const LOOK_PITCH_MIN: float = -1.4
 const LOOK_PITCH_MAX: float = 1.4
 
+@export_group("Gladiator Locomotion")
+@export var ground_acceleration: float = 46.0
+@export var air_acceleration: float = 17.0
+@export var friction: float = 5.5
+@export var air_control: float = 0.48
+@export var max_ground_speed: float = 7.6
+@export var max_air_speed: float = 9.0
+@export var strafe_boost: float = 1.08
+@export var landing_damp: float = 0.5
+@export var movement_tilt_strength: float = 0.03
+@export var speed_fov_boost: float = 6.5
+@export var landing_shake_strength: float = 0.14
+
+@export_group("Dodge")
+@export var dodge_distance: float = 2.05
+@export var dodge_duration: float = 0.15
+@export var dodge_cooldown: float = 1.4
+
+@export_group("Debug")
+@export var debug_movement: bool = false
+
 @onready var camera: Camera3D = $Camera3D
 @onready var combat_stats: CombatStats = $CombatStats
+
+var _dodge: CombatDodge = CombatDodge.new()
+var _camera_feel: GladiatorCameraFeel = GladiatorCameraFeel.new()
+var _was_on_floor: bool = true
+var _knockback_blend: float = 0.0
 
 var _gravity: float = ProjectSettings.get_setting("physics/3d/default_gravity")
 var _spawn_position: Vector3 = Vector3.ZERO
@@ -53,6 +83,10 @@ func _ready() -> void:
 	else:
 		_spawn_position = global_position
 	Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
+	_dodge.dodge_distance = dodge_distance
+	_dodge.dodge_duration = dodge_duration
+	_dodge.dodge_cooldown = dodge_cooldown
+	_camera_feel.reset(camera)
 	combat_stats.died.connect(_on_combat_died)
 
 
@@ -73,31 +107,35 @@ func _on_combat_died(_attacker: Node) -> void:
 	if _death_handled:
 		return
 	_death_handled = true
-	var heavy: bool = combat_stats.is_heavy_death()
+	var dismember: bool = combat_stats.is_dismemberment_death()
 	var world: Node = get_tree().current_scene
-	if heavy:
-		_begin_obliteration_shake()
-		GibSpawner.play_heavy_death(
+	if dismember:
+		var shake: float = 1.45
+		if combat_stats.last_damage_source in ["shotgun", "bazooka_direct", "bazooka_explosion"]:
+			shake = 1.75
+		_begin_obliteration_shake(shake)
+		DismembermentSpawner.play_from_stats(
 			world,
 			get_death_gib_position(),
-			combat_stats.last_hit_direction,
-			combat_stats.get_corpse_launch_force(),
-			combat_stats.last_damage_source
+			combat_stats,
+			Color(0.24, 0.08, 0.1),
+			Color(0.14, 0.38, 0.48),
+			false
 		)
 	else:
 		_spawn_death_corpse()
 	_hide_live_fighter()
 	_enter_death_hidden_state()
 	if _game_manager and _game_manager.has_method("on_health_death"):
-		_game_manager.on_health_death(true, heavy)
+		_game_manager.on_health_death(true, dismember, combat_stats)
 
 
 func get_death_gib_position() -> Vector3:
 	return global_position + Vector3(0.0, 0.85, 0.0)
 
 
-func _begin_obliteration_shake() -> void:
-	_obliteration_shake = 1.0
+func _begin_obliteration_shake(intensity: float = 1.0) -> void:
+	_obliteration_shake = intensity
 
 
 func _hide_live_fighter() -> void:
@@ -214,6 +252,7 @@ func apply_knockback(direction: Vector3, force: float, allow_vertical_lift: bool
 		velocity.y += force * up_factor
 		_last_vertical_lift_time_sec = _time_sec()
 
+	_knockback_blend = 0.35
 	_clamp_knockback_velocity(airborne)
 	return applied
 
@@ -232,6 +271,7 @@ func apply_explosion_knockback(
 
 	velocity.y += vertical_force
 
+	_knockback_blend = 0.4
 	_clamp_knockback_velocity(airborne)
 
 
@@ -248,6 +288,7 @@ func apply_rocket_jump_knockback(
 		velocity.z += h_dir.z * horizontal_force
 
 	velocity.y += vertical_force
+	_knockback_blend = 0.55
 	_clamp_rocket_jump_velocity(airborne)
 
 
@@ -313,8 +354,12 @@ func arena_respawn(spawn_position: Vector3) -> void:
 	_void_fall_shake = 0.0
 	_void_fall_time = 0.0
 	_last_vertical_lift_time_sec = -1.0
+	_knockback_blend = 0.0
+	_dodge.reset()
+	_was_on_floor = true
 	_hide_void_fall_proxy()
 	_exit_death_hidden_state()
+	_camera_feel.reset(camera)
 	camera.rotation.x = 0.0
 	camera.rotation.z = 0.0
 	camera.fov = GameBalance.VOID_FALL_FOV_START
@@ -387,27 +432,73 @@ func _physics_process(delta: float) -> void:
 		move_and_slide()
 		return
 
-	if not is_on_floor():
-		velocity.y -= _gravity * delta
-
-	if Input.is_action_just_pressed("jump") and is_on_floor():
+	_dodge.tick(delta)
+	if Input.is_action_just_pressed("jump") and is_on_floor() and not _dodge.is_active():
 		velocity.y = JUMP_VELOCITY
 
 	var input_dir := Input.get_vector("move_left", "move_right", "move_forward", "move_back")
-	var direction := (transform.basis * Vector3(input_dir.x, 0.0, input_dir.y)).normalized()
+	if input_dir.length_squared() > 0.01:
+		_dodge.register_move_input(input_dir)
+		var dodge_try: Dictionary = {}
+		if Input.is_action_just_pressed("sprint"):
+			dodge_try = _dodge.try_player_dodge(input_dir, transform.basis, true)
+		elif _dodge.consume_double_tap_if_ready(input_dir):
+			dodge_try = _dodge.try_player_dodge(input_dir, transform.basis, true)
+		if dodge_try.get("triggered", false):
+			movement_dodged.emit(dodge_try.direction as Vector3)
 
-	var speed := SPRINT_SPEED if Input.is_action_pressed("sprint") else WALK_SPEED
-	if direction.is_zero_approx():
-		velocity.x = move_toward(velocity.x, 0.0, speed)
-		velocity.z = move_toward(velocity.z, 0.0, speed)
-	else:
-		velocity.x = direction.x * speed
-		velocity.z = direction.z * speed
+	var dodge_boost: Vector3 = _dodge.get_active_velocity_boost()
+	var loco_config: Dictionary = _locomotion_config()
+	var step: GladiatorLocomotion.StepResult = GladiatorLocomotion.step(
+		self,
+		delta,
+		input_dir,
+		transform.basis,
+		_gravity,
+		loco_config,
+		dodge_boost,
+		_was_on_floor
+	)
+	_was_on_floor = is_on_floor()
+
+	if step.just_landed:
+		movement_landed.emit(step.land_impact)
+		if step.land_impact > 4.5:
+			movement_heavy_impact.emit(step.land_impact)
+	if step.high_speed:
+		movement_high_speed.emit(step.horizontal_speed)
+	if step.air_accel_event:
+		movement_air_accel.emit()
+
+	_knockback_blend = maxf(0.0, _knockback_blend - delta * 2.2)
+	_camera_feel.update(camera, delta, step, input_dir, loco_config, _dodge.is_active())
+
+	if debug_movement:
+		print(
+			"Move spd=%.1f floor=%s dodge_cd=%.2f"
+			% [step.horizontal_speed, is_on_floor(), _dodge.get_cooldown_remaining()]
+		)
 
 	move_and_slide()
 
 	if global_position.y < _void_y:
 		_report_void_fall()
+
+
+func _locomotion_config() -> Dictionary:
+	return {
+		"ground_acceleration": ground_acceleration,
+		"air_acceleration": air_acceleration,
+		"friction": friction * (0.65 if _knockback_blend > 0.05 else 1.0),
+		"air_control": air_control,
+		"max_ground_speed": max_ground_speed,
+		"max_air_speed": max_air_speed,
+		"strafe_boost": strafe_boost,
+		"landing_damp": landing_damp,
+		"movement_tilt_strength": movement_tilt_strength,
+		"speed_fov_boost": speed_fov_boost,
+		"landing_shake_strength": landing_shake_strength,
+	}
 
 
 func _report_void_fall() -> void:
