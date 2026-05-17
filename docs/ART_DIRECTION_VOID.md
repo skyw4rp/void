@@ -1,103 +1,56 @@
-# VOID — Perceptual Horror Art Direction
+# Void perceptual horror — implementation index
 
-The void is the enemy. Horror emerges from **space, depth, and perception** before any opponent appears.
+> **Canonical design doc:** [art/ART_DIRECTION.md](art/ART_DIRECTION.md)  
+> **Project overview:** [project_bible/PROJECT_BIBLE.md](project_bible/PROJECT_BIBLE.md)
 
-## Core fantasy
-
-> “I survived a place humans should not enter.”
-
-Target emotion mix: **40% tension**, **30% isolation**, **20% curiosity**, **10% terror** — not constant action horror.
-
-## Inspirations
-
-Quake (industrial darkness), Unreal/liminal spaces, infinite abyss, acrophobia, cosmic loneliness, perceptual horror.
+This file tracks **what exists in the current prototype** for the perceptual horror pass. Design rules live in `art/ART_DIRECTION.md`.
 
 ---
 
-## 1. Fear of falling
+## In-game systems
 
-- Narrow bridge, open sides, no visible bottom
-- Hanging debris (`VoidAtmosphere/HangingDebris`)
-- Pit floor **hidden** — abyss uses fog layers + particles, not flat black plane
-- Player thought: *“If I fall, I disappear.”*
+| Feature | Location |
+|---------|----------|
+| Living abyss (fog, particles, pulse) | `scenes/environment/void_atmosphere.tscn` |
+| Void observers (hide when stared at) | `scenes/environment/void_observer.tscn` |
+| VOID_GORE fall timeline | `scripts/effects/void_gore_sequence.gd` |
+| Void death styles | `scripts/game_balance.gd` → `VOID_DEATH_STYLE` |
+| Audio placeholders | `scripts/environment/void_audio.gd` |
+| Hidden pit floor | `main.tscn` — `PitVoid` invisible; atmosphere handles abyss |
+| Cold industrial lighting | `main.tscn` |
 
-## 2. The void as entity
+---
 
-Implemented in `scenes/environment/void_atmosphere.tscn`:
-
-- Moving fog layers below the arena
-- Drifting abyss particles
-- Pulsing depth light
-- Distant silhouettes (`void_observer.tscn`) that fade when stared at
-- Rare distant flashes after void deaths
-
-Rules: darkness gradients, not flat black; subtle motion in the abyss.
-
-## 3. Kenophobia (empty space)
-
-- Large fog volume, sparse props
-- Tiny player vs wide industrial bridge
-- Empty space is content — avoid clutter
-
-## 4. Fall cinematics (`VOID_GORE`)
+## VOID_GORE timeline (seconds)
 
 | Time | Beat |
 |------|------|
-| 0.0s | Loss of balance / slide |
-| 0.35s | Desperate movement ends → freefall |
-| 0.5s | Void wind, ambient motes |
-| 1.2s | Corruption gas |
-| 1.6s | Body breakup |
-| 2.0s | Burst → **score** |
-| 3.5–6s | Delayed impact **or silence** (38% silent) |
-| 4–7s | Optional distant abyss flash |
+| 0.0 | Loss of balance |
+| 0.35 | Freefall |
+| 0.5 | Ambient motes / void wind |
+| 1.2 | Corruption cloud |
+| 1.6 | Body breakup |
+| 2.0 | Burst → score |
+| 3.5–6 | Impact echo or **silence** |
+| 4–7 | Optional distant abyss flash |
 
-Audio placeholders: `scripts/environment/void_audio.gd`
+---
 
-## 5. Uncanny silhouettes
+## Tuning constants
 
-- Static humanoid capsules in the pit
-- Hide when player looks directly (`void_observer.gd`)
-- Never fully reveal
+`scripts/game_balance.gd`:
 
-## 6. Perception distortion
+- `VOID_SILENT_ABSORPTION_CHANCE`
+- `VOID_DISTANT_FLASH_CHANCE`
+- `VOID_DEATH_STYLE` (default `VOID_GORE`)
 
-- Floating / broken architecture (debris, broken columns)
-- Platform ends in void
-- Suspended structures with no visible support
+---
 
-## 7. Sound design
+## Not yet in build
 
-Sparse. Silence is allowed.
+- Real audio assets (drones, reverb tails)
+- Additional levels (vertical shafts, massive halls)
+- Non-euclidean layouts
+- Broken gravity zones
 
-- Deep drones, wind without source, metallic resonance
-- Long reverb on rupture/burst (placeholder prints)
-- **No impact** sometimes — unknown destination
-
-## 8. Visual palette
-
-| Use | Colors |
-|-----|--------|
-| Structure | Dark grey, muted steel |
-| Void | Cold blue-black gradients |
-| Light | Cool directional + sparse rim |
-| Gore | Dark red / black (stylized) |
-
-**Avoid:** bright saturation, cartoon particles, warm orange fills.
-
-## 9. Implementation map
-
-| Asset / script | Role |
-|----------------|------|
-| `void_atmosphere.tscn` | Living abyss |
-| `void_observer.tscn` | Periphery silhouettes |
-| `void_audio.gd` | Audio placeholders |
-| `void_gore_sequence.gd` | Pit death timeline |
-| `game_balance.gd` | Style + timing constants |
-| `main.tscn` | Cold lighting, hidden pit plane |
-
-## Tuning
-
-- Void death style: `GameBalance.VOID_DEATH_STYLE`
-- Silent absorption chance: `VOID_SILENT_ABSORPTION_CHANCE`
-- Distant flash chance: `VOID_DISTANT_FLASH_CHANCE`
+See [roadmap/ROADMAP.md](roadmap/ROADMAP.md).

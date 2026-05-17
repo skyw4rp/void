@@ -2,7 +2,7 @@
 
 Godot 4.6 first-person **knock-off duel** on a deadly **suspended bridge** over a **perceptual horror void**. Win by **ring-out** or by **breaking shield and killing** your opponent.
 
-**Art direction:** see [ART_DIRECTION_VOID.md](ART_DIRECTION_VOID.md) — fear of falling, living abyss, kenophobia, void-as-entity.
+**Art direction:** [art/ART_DIRECTION.md](art/ART_DIRECTION.md) (canonical) · [ART_DIRECTION_VOID.md](ART_DIRECTION_VOID.md) (prototype implementation index) · [docs index](README.md)
 
 ## Game rules
 

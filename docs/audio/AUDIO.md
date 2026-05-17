@@ -45,9 +45,11 @@ VOID sound is **sparse, deep, and sourceless**. The abyss should feel like it ha
 ## Silence Rules
 
 - Silence is **allowed** and often stronger than SFX
-- After void absorption: **~38% chance of no impact sound** (design constant)
-- Do not fill every second with noise
+- **Never overfill** the mix — void horror needs space
+- After void absorption: **~38% chance of no impact sound** (`VOID_SILENT_ABSORPTION_CHANCE`)
+- Unknown destination (no impact) = stronger fear than a cartoon splash
 - Countdown can be nearly dry except tick/FIGHT
+- Distant flash may have **no** paired loud SFX — doubt is the point
 
 ---
 

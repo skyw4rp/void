@@ -45,13 +45,23 @@ The player should feel:
 
 ## Inspirations
 
+- **Quake** — dark industrial mood
+- **Unreal / liminal spaces**
+- **Infinite abyss** concepts
+- **Acrophobia / void anxiety**
+- **Cosmic loneliness**
+- **Perceptual horror**
+
 | Source | What we take |
 |--------|----------------|
 | **Quake** | Industrial darkness, hard shadows, arena clarity |
-| **Unreal / liminal spaces** | Wrong scale, floating architecture |
-| **Infinite abyss / acrophobia** | No visible floor, vertical anxiety |
-| **Cosmic horror** | The void observes; answers are withheld |
-| **Arena fighters / pit stages** | Ring-out stakes, readable 1v1 |
+| **Unreal / liminal** | Wrong scale, floating architecture |
+| **Infinite abyss** | No visible floor, vertical anxiety |
+| **Cosmic loneliness** | Isolation, sparse audio |
+| **Perceptual horror** | Silhouettes, doubt, withheld answers |
+| **Arena pit stages** | Ring-out stakes, readable 1v1 |
+
+Full perceptual targets: [Art Direction](../art/ART_DIRECTION.md#psychological-targets)
 
 ---
 
@@ -84,7 +94,11 @@ The player should feel:
 
 ## Related Documents
 
-- [Art Direction](../art/ART_DIRECTION.md)
+- [Documentation index](../README.md)
+- [Art Direction — psychological targets](../art/ART_DIRECTION.md)
+- [Visual Rules](../art/VISUAL_RULES.md)
 - [Gameplay](../gameplay/GAMEPLAY.md)
+- [Audio](../audio/AUDIO.md)
 - [Tech Architecture](../tech/ARCHITECTURE.md)
+- [Void implementation index](../ART_DIRECTION_VOID.md)
 - [Roadmap](../roadmap/ROADMAP.md)
