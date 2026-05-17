@@ -25,7 +25,7 @@ func _physics_process(delta: float) -> void:
 
 func _unhandled_input(event: InputEvent) -> void:
 	var game_manager := get_tree().get_first_node_in_group("game_manager")
-	if game_manager and not game_manager.is_round_active():
+	if game_manager and game_manager.has_method("is_fighting") and not game_manager.is_fighting():
 		return
 
 	if event.is_action_pressed("weapon_1"):

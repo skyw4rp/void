@@ -4,6 +4,8 @@ extends Area3D
 @export var speed: float = 35.0
 @export var lifetime: float = 3.0
 @export var push_force: float = 18.0
+@export var damage: int = 12
+@export var damage_source: String = "pistol"
 
 var _direction: Vector3 = Vector3.FORWARD
 var _spent: bool = false
@@ -12,6 +14,7 @@ var _shooter: Node = null
 
 
 func _ready() -> void:
+	add_to_group("projectile")
 	body_entered.connect(_on_body_entered)
 	get_tree().create_timer(lifetime).timeout.connect(_despawn)
 
@@ -26,6 +29,8 @@ func launch(from: Vector3, direction: Vector3, shooter: Node = null) -> void:
 func configure(stats: Dictionary) -> void:
 	speed = stats.get("speed", speed)
 	push_force = stats.get("push_force", push_force)
+	damage = stats.get("damage", damage)
+	damage_source = stats.get("damage_source", damage_source)
 	lifetime = stats.get("lifetime", lifetime)
 	var mesh: MeshInstance3D = get_node_or_null("MeshInstance3D") as MeshInstance3D
 	if mesh and stats.has("mesh_scale"):
@@ -49,7 +54,9 @@ func _on_body_entered(body: Node3D) -> void:
 	if PushHitResolver.is_shooter(body, _shooter):
 		return
 
-	if PushHitResolver.apply_projectile_hit(body, _direction, push_force, global_position):
+	if PushHitResolver.apply_projectile_hit(
+		body, _direction, push_force, global_position, damage, _shooter, damage_source
+	):
 		_despawn()
 		return
 

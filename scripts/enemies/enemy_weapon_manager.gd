@@ -40,6 +40,9 @@ func switch_weapon(weapon: WeaponDefs.Id) -> void:
 
 
 func try_fire(origin: Vector3, direction: Vector3, aim_basis: Basis) -> bool:
+	var game_manager := get_tree().get_first_node_in_group("game_manager")
+	if game_manager and game_manager.has_method("is_fighting") and not game_manager.is_fighting():
+		return false
 	if _cooldown_remaining > 0.0:
 		return false
 

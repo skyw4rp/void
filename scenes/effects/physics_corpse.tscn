@@ -1,0 +1,30 @@
+[gd_scene load_steps=5 format=3 uid="uid://cphysicscorpse01"]
+
+[ext_resource type="Script" path="res://scripts/effects/physics_corpse.gd" id="1_script"]
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_corpse"]
+albedo_color = Color(0.45, 0.48, 0.55, 1)
+roughness = 0.75
+
+[sub_resource type="CapsuleMesh" id="CapsuleMesh_corpse"]
+radius = 0.42
+height = 1.5
+
+[sub_resource type="CapsuleShape3D" id="CapsuleShape3D_corpse"]
+radius = 0.42
+height = 1.5
+
+[node name="PhysicsCorpse" type="RigidBody3D"]
+collision_layer = 8
+collision_mask = 1
+mass = 5.0
+linear_damp = 0.2
+angular_damp = 0.4
+script = ExtResource("1_script")
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="."]
+material_override = SubResource("StandardMaterial3D_corpse")
+mesh = SubResource("CapsuleMesh_corpse")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="."]
+shape = SubResource("CapsuleShape3D_corpse")

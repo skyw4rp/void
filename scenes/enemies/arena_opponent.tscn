@@ -1,6 +1,7 @@
-[gd_scene load_steps=5 format=3 uid="uid://carenaopponent01"]
+[gd_scene load_steps=6 format=3 uid="uid://carenaopponent01"]
 
 [ext_resource type="Script" path="res://scripts/enemies/arena_opponent.gd" id="1_script"]
+[ext_resource type="Script" path="res://scripts/combat_stats.gd" id="3_combat_stats"]
 [ext_resource type="PackedScene" uid="uid://cenemyweaponmgr01" path="res://scenes/enemies/enemy_weapon_manager.tscn" id="2_weapons"]
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_opponent"]
@@ -21,8 +22,15 @@ height = 1.6
 [node name="ArenaOpponent" type="RigidBody3D"]
 axis_lock_angular_x = true
 axis_lock_angular_z = true
-mass = 3.5
+linear_damp = 0.6
+mass = 5.0
 script = ExtResource("1_script")
+safe_half_x = 3.2
+danger_half_x = 3.8
+safe_half_z = 12.0
+danger_half_z = 13.5
+edge_avoid_force = 18.0
+ideal_distance_max = 11.0
 
 [node name="MeshInstance3D" type="MeshInstance3D" parent="."]
 material_override = SubResource("StandardMaterial3D_opponent")
@@ -30,6 +38,10 @@ mesh = SubResource("CapsuleMesh_opponent")
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="."]
 shape = SubResource("CapsuleShape3D_opponent")
+
+[node name="CombatStats" type="Node" parent="."]
+script = ExtResource("3_combat_stats")
+debug_name = "Enemy"
 
 [node name="WeaponPivot" type="Node3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.35, 0)

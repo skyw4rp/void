@@ -20,7 +20,7 @@ static func fire(
 	var spawn_pos := origin + base_dir * spawn_forward_offset
 
 	if data.get("use_bazooka_scene", false):
-		_spawn_bazooka(spawn_pos, base_dir, scene_root, shooter)
+		_spawn_bazooka(spawn_pos, base_dir, data.bazooka, scene_root, shooter)
 	else:
 		var pellets: int = data.pellets
 		for i in pellets:
@@ -52,8 +52,10 @@ static func _spawn_standard_projectile(
 
 
 static func _spawn_bazooka(
-	from: Vector3, direction: Vector3, scene_root: Node, shooter: Node
+	from: Vector3, direction: Vector3, stats: Dictionary, scene_root: Node, shooter: Node
 ) -> void:
 	var projectile: Area3D = BAZOOKA_PROJECTILE_SCENE.instantiate() as Area3D
 	scene_root.add_child(projectile)
+	if projectile.has_method("configure"):
+		projectile.configure(stats)
 	projectile.launch(from, direction, shooter)

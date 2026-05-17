@@ -4,7 +4,12 @@ extends Object
 
 
 static func detonate(
-	origin: Vector3, radius: float, force: float, source: Node, shooter: Node = null
+	origin: Vector3,
+	radius: float,
+	force: float,
+	source: Node,
+	shooter: Node = null,
+	explosion_damage: int = 0
 ) -> void:
 	var world: World3D = source.get_world_3d()
 	var space := world.direct_space_state
@@ -29,7 +34,9 @@ static func detonate(
 		var node: Node3D = body as Node3D
 		if PushHitResolver.is_shooter(node, shooter):
 			continue
-		if PushHitResolver.apply_explosion_hit(node, origin, force, radius):
+		if PushHitResolver.apply_explosion_hit(
+			node, origin, force, radius, explosion_damage, shooter
+		):
 			pushed += 1
 			if node.is_in_group("player"):
 				player_handled = true
@@ -40,7 +47,9 @@ static func detonate(
 		if player and not PushHitResolver.is_shooter(player, shooter):
 			var dist: float = player.global_position.distance_to(origin)
 			if dist <= radius:
-				if PushHitResolver.apply_explosion_hit(player, origin, force, radius):
+				if PushHitResolver.apply_explosion_hit(
+					player, origin, force, radius, explosion_damage, shooter
+				):
 					pushed += 1
 
 	print("Explosion: %d target(s) pushed at %s (radius=%.1f)" % [pushed, origin, radius])
