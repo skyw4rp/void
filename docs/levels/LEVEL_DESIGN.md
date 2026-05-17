@@ -29,7 +29,7 @@ Each round builds a **partial outer shell** via `ArenaPerimeterBuilder`:
 
 - **60–80% protected** — `ringout_open_sides` leave tactical openings; fall markers at edges
 - **Gas below deck** — dense layers at **Y -18** and lower; clear footing at **Y = 0**
-- ~**32%** of perimeter panels are **destructible** (`ArenaPerimeterPanel`, 120 HP)
+- All perimeter collision panels are **destructible** (`DestructibleWall`, **70–200** HP by piece type)
 - Materials: dark concrete, oxidized metal, black stone
 - Inner `arena_wall` pieces + outer perimeter + destructible debris = layered cover
 

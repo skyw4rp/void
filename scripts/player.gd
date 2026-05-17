@@ -235,6 +235,42 @@ func apply_explosion_knockback(
 	_clamp_knockback_velocity(airborne)
 
 
+## Rocket jump — bazooka self-blast with higher vertical cap than normal explosions.
+func apply_rocket_jump_knockback(
+	horizontal_direction: Vector3, horizontal_force: float, vertical_force: float
+) -> void:
+	var airborne: bool = not is_on_floor()
+	var h_dir: Vector3 = Vector3(horizontal_direction.x, 0.0, horizontal_direction.z)
+	if h_dir.length_squared() > 0.001:
+		h_dir = h_dir.normalized()
+		# Rocket jump forces are pre-scaled in WeaponDefs — no player knockback multiplier.
+		velocity.x += h_dir.x * horizontal_force
+		velocity.z += h_dir.z * horizontal_force
+
+	velocity.y += vertical_force
+	_clamp_rocket_jump_velocity(airborne)
+
+
+func _clamp_rocket_jump_velocity(airborne: bool) -> void:
+	var max_h: float = WeaponDefs.MAX_ROCKET_JUMP_HORIZONTAL_VELOCITY
+	var horizontal: Vector3 = Vector3(velocity.x, 0.0, velocity.z)
+	if horizontal.length() > max_h:
+		horizontal = horizontal.normalized() * max_h
+		velocity.x = horizontal.x
+		velocity.z = horizontal.z
+
+	velocity.y = clampf(
+		velocity.y,
+		max_downward_velocity,
+		WeaponDefs.MAX_ROCKET_JUMP_UPWARD_VELOCITY
+	)
+	var horiz_speed: float = horizontal.length()
+	print(
+		"Rocket jump applied: velocity=%s (horizontal=%.1f vertical=%.1f)"
+		% [velocity, horiz_speed, velocity.y]
+	)
+
+
 func _should_apply_vertical_lift() -> bool:
 	var now: float = _time_sec()
 	if now - _last_vertical_lift_time_sec >= WeaponDefs.SHOTGUN_VERTICAL_LIFT_WINDOW_SEC:

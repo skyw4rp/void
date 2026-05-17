@@ -3,6 +3,89 @@ class_name PushHitResolver
 extends RefCounted
 
 
+const GROUP_DESTRUCTIBLE_WALL: String = "destructible_wall"
+const GROUP_STRUCTURAL: String = "structural_geometry"
+const GROUP_LOW_IMPULSE_FRAGMENT: String = "low_impulse_fragment"
+const FRAGMENT_EXPLOSION_KNOCKBACK_MULT: float = 0.12
+
+
+static func resolve_hit_body(body: Node) -> Node:
+	if body == null:
+		return null
+	if body.has_method("get_wall_grid"):
+		var grid: Node = body.call("get_wall_grid") as Node
+		if grid:
+			return grid
+	if body is CollisionObject3D:
+		return body
+	var parent: Node = body.get_parent()
+	if parent is StaticBody3D:
+		return parent
+	return body
+
+
+static func describe_body(body: Node) -> String:
+	var target: Node = resolve_hit_body(body)
+	if target == null:
+		return "null"
+	return target.name
+
+
+static func is_anonymous_static(body: Node) -> bool:
+	var target: Node = resolve_hit_body(body)
+	if target == null or not target is StaticBody3D:
+		return false
+	if target is DestructibleWall or target is StructuralFloor:
+		return false
+	var node_name: String = target.name
+	return node_name.begins_with("@") or node_name == "StaticBody3D"
+
+
+static func is_destructible_wall(body: Node) -> bool:
+	var target: Node = resolve_hit_body(body)
+	if target == null:
+		return false
+	if target.is_in_group(GROUP_DESTRUCTIBLE_WALL):
+		return true
+	return target.has_method("is_destructible_wall") and target.call("is_destructible_wall")
+
+
+static func is_structural_geometry(body: Node) -> bool:
+	var target: Node = resolve_hit_body(body)
+	if target == null:
+		return false
+	return StructuralFloor.is_structural_node(target)
+
+
+static func log_static_hit(body: Node, source: String) -> void:
+	var target: Node = resolve_hit_body(body)
+	if target == null:
+		return
+	if is_anonymous_static(target):
+		print(
+			"WARNING: Anonymous StaticBody hit; check generator (name='%s', source=%s)"
+			% [target.name, source]
+		)
+		return
+	if is_structural_geometry(target):
+		var kind: String = "connector" if target.is_in_group("structural_connector") else "floor"
+		print("Hit structural %s, not destructible: '%s'" % [kind, target.name])
+		return
+
+
+static func is_combat_fighter(body: Node) -> bool:
+	body = resolve_hit_body(body)
+	if body == null:
+		return false
+	if body.get_node_or_null("CombatStats") != null:
+		return true
+	if body.has_method("take_damage") and (
+		body.is_in_group("player") or body.is_in_group("arena_opponent")
+	):
+		return true
+	return false
+
+
 static func is_shooter(body: Node, shooter: Node) -> bool:
 	if shooter == null:
 		return false
@@ -45,11 +128,24 @@ static func compute_explosion_forces(
 	}
 
 
+static func _fragment_knockback_multiplier(body: Node) -> float:
+	var target: Node = resolve_hit_body(body)
+	if target == null or not target.is_in_group(GROUP_LOW_IMPULSE_FRAGMENT):
+		return 1.0
+	if target.has_method("is_fragment_knockback_immune") and target.call("is_fragment_knockback_immune"):
+		return 0.0
+	print("Low impulse fragment knockback reduced")
+	return FRAGMENT_EXPLOSION_KNOCKBACK_MULT
+
+
 static func apply_rigidbody_impulse(
 	rigid: RigidBody3D, direction: Vector3, force: float, hit_position: Vector3
 ) -> void:
+	var mult: float = _fragment_knockback_multiplier(rigid)
+	if mult <= 0.0:
+		return
 	var offset: Vector3 = hit_position - rigid.global_position
-	var impulse: Vector3 = compute_rigidbody_impulse(direction, force, rigid.mass)
+	var impulse: Vector3 = compute_rigidbody_impulse(direction, force * mult, rigid.mass)
 	rigid.apply_impulse(impulse, offset)
 	print(
 		"RigidBody impulse applied: %s on '%s' (final vel=%s)"
@@ -64,8 +160,11 @@ static func _apply_rigidbody_explosion_impulse(
 	vertical_force: float,
 	hit_position: Vector3
 ) -> void:
+	var frag_mult: float = _fragment_knockback_multiplier(rigid)
+	if frag_mult <= 0.0:
+		return
 	var mass: float = rigid.mass
-	var mult: float = WeaponDefs.RIGIDBODY_KNOCKBACK_MULTIPLIER
+	var mult: float = WeaponDefs.RIGIDBODY_KNOCKBACK_MULTIPLIER * frag_mult
 	var horizontal_impulse: Vector3 = horizontal_dir * horizontal_force * mass * mult
 	var vertical_impulse: Vector3 = Vector3.UP * vertical_force * mass * mult
 	var impulse: Vector3 = horizontal_impulse + vertical_impulse
@@ -99,12 +198,28 @@ static func apply_damage_to_target(
 	attacker: Node,
 	direction: Vector3 = Vector3.ZERO,
 	force: float = 0.0,
-	source: String = ""
+	source: String = "",
+	hit_world: Vector3 = Vector3.ZERO
 ) -> void:
 	if amount <= 0:
 		return
+	body = resolve_hit_body(body)
+	if is_structural_geometry(body):
+		log_static_hit(body, source)
+		return
+	if is_anonymous_static(body):
+		log_static_hit(body, source)
+		return
 	if body.has_method("damage_cover"):
-		body.call("damage_cover", amount, attacker, direction, force, source)
+		var origin: Vector3 = hit_world
+		if origin.length_squared() < 0.001 and direction.length_squared() > 0.001:
+			origin = (body as Node3D).global_position
+		if is_destructible_wall(body):
+			body.call(
+				"damage_cover", amount, attacker, direction, force, source, origin, 0.0
+			)
+		else:
+			body.call("damage_cover", amount, attacker, direction, force, source)
 		if _is_player_attacker(attacker) and body.is_inside_tree():
 			Crosshair.notify_player_hit_cover(body.get_tree())
 		return
@@ -153,18 +268,30 @@ static func apply_damped_projectile_hit(
 	var vertical_force: float = _compute_damped_vertical_force(raw_dir, force)
 	var handled: bool = false
 
+	body = resolve_hit_body(body)
+
+	if is_structural_geometry(body):
+		log_static_hit(body, damage_source)
+		return true
+
+	if is_anonymous_static(body):
+		log_static_hit(body, damage_source)
+		return true
+
 	if body is RigidBody3D:
 		var rigid: RigidBody3D = body as RigidBody3D
 		_apply_rigidbody_explosion_impulse(
 			rigid, horizontal_dir, force, vertical_force, hit_position
 		)
 		handled = true
+	elif is_destructible_wall(body):
+		handled = true
 	elif body.has_method("apply_explosion_knockback"):
 		body.call("apply_explosion_knockback", horizontal_dir, force, vertical_force)
 		handled = true
 
 	if handled and damage > 0:
-		apply_damage_to_target(body, damage, attacker, raw_dir, force, damage_source)
+		apply_damage_to_target(body, damage, attacker, raw_dir, force, damage_source, hit_position)
 	return handled
 
 
@@ -187,8 +314,23 @@ static func apply_railgun_hit(
 	)
 	var handled: bool = false
 
+	body = resolve_hit_body(body)
+
+	if is_structural_geometry(body):
+		log_static_hit(body, damage_source)
+		return true
+
+	if is_anonymous_static(body):
+		log_static_hit(body, damage_source)
+		return true
+
+	if is_destructible_wall(body):
+		return true
+
 	if body is RigidBody3D:
 		var rigid: RigidBody3D = body as RigidBody3D
+		if rigid.is_in_group(GROUP_LOW_IMPULSE_FRAGMENT):
+			return true
 		_apply_rigidbody_explosion_impulse(
 			rigid, horizontal_dir, force, vertical_force, hit_position
 		)
@@ -201,7 +343,9 @@ static func apply_railgun_hit(
 		handled = true
 
 	if handled and damage > 0:
-		apply_damage_to_target(body, damage, attacker, horizontal_dir, force, damage_source)
+		apply_damage_to_target(
+			body, damage, attacker, horizontal_dir, force, damage_source, hit_position
+		)
 	return handled
 
 
@@ -214,10 +358,22 @@ static func apply_projectile_hit(
 	attacker: Node = null,
 	damage_source: String = ""
 ) -> bool:
+	body = resolve_hit_body(body)
+
+	if is_structural_geometry(body):
+		log_static_hit(body, damage_source)
+		return true
+
+	if is_anonymous_static(body):
+		log_static_hit(body, damage_source)
+		return true
+
 	var handled: bool = false
 	if body is RigidBody3D:
 		var rigid: RigidBody3D = body as RigidBody3D
 		apply_rigidbody_impulse(rigid, travel_direction, force, hit_position)
+		handled = true
+	elif is_destructible_wall(body):
 		handled = true
 	elif body.has_method("apply_knockback"):
 		body.call("apply_knockback", travel_direction, force)
@@ -225,7 +381,9 @@ static func apply_projectile_hit(
 
 	if handled and damage > 0:
 		var hit_dir: Vector3 = travel_direction.normalized()
-		apply_damage_to_target(body, damage, attacker, hit_dir, force, damage_source)
+		apply_damage_to_target(
+			body, damage, attacker, hit_dir, force, damage_source, hit_position
+		)
 	return handled
 
 
@@ -241,6 +399,18 @@ static func apply_explosion_hit(
 	var horizontal_dir: Vector3 = forces.horizontal_dir
 	var horizontal_force: float = forces.horizontal_force
 	var vertical_force: float = forces.vertical_force
+	body = resolve_hit_body(body) as Node3D
+	if body == null:
+		return false
+
+	if is_structural_geometry(body):
+		log_static_hit(body, "bazooka_explosion")
+		return true
+
+	if is_anonymous_static(body):
+		log_static_hit(body, "bazooka_explosion")
+		return true
+
 	var handled: bool = false
 
 	if body is RigidBody3D:
@@ -248,6 +418,8 @@ static func apply_explosion_hit(
 		_apply_rigidbody_explosion_impulse(
 			rigid, horizontal_dir, horizontal_force, vertical_force, body.global_position
 		)
+		handled = true
+	elif is_destructible_wall(body):
 		handled = true
 	elif body.has_method("apply_explosion_knockback"):
 		body.call("apply_explosion_knockback", horizontal_dir, horizontal_force, vertical_force)
@@ -261,12 +433,121 @@ static func apply_explosion_hit(
 			var blast_dir: Vector3 = body.global_position - origin
 			if blast_dir.length_squared() < 0.001:
 				blast_dir = horizontal_dir
-			apply_damage_to_target(
-				body,
-				damage,
-				attacker,
-				blast_dir,
-				horizontal_force,
-				"bazooka_explosion"
-			)
+			if is_destructible_wall(body):
+				_apply_wall_explosion_damage(
+					body, origin, radius, attacker, blast_dir, horizontal_force
+				)
+			else:
+				apply_damage_to_target(
+					body,
+					damage,
+					attacker,
+					blast_dir,
+					horizontal_force,
+					"bazooka_explosion"
+				)
 	return handled
+
+
+static func _apply_wall_explosion_damage(
+	body: Node,
+	origin: Vector3,
+	radius: float,
+	attacker: Node,
+	blast_dir: Vector3,
+	horizontal_force: float
+) -> void:
+	var wall_damage: int = WeaponDefs.wall_explosion_damage_at_distance(
+		WeaponDefs.WALL_DAMAGE_BAZOOKA_EXPLOSION_MAX,
+		origin,
+		(body as Node3D).global_position,
+		radius
+	)
+	if wall_damage <= 0:
+		return
+	body.call(
+		"damage_cover",
+		wall_damage,
+		attacker,
+		blast_dir,
+		horizontal_force,
+		"bazooka_explosion",
+		origin,
+		radius
+	)
+	if _is_player_attacker(attacker) and body.is_inside_tree():
+		Crosshair.notify_player_hit_cover(body.get_tree())
+
+
+static func apply_shooter_rocket_jump(
+	shooter_body: Node3D,
+	origin: Vector3,
+	force: float,
+	radius: float,
+	explosion_damage: int,
+	shooter: Node
+) -> void:
+	var dist: float = shooter_body.global_position.distance_to(origin)
+	if dist > radius:
+		return
+
+	var forces: Dictionary = compute_rocket_jump_forces(
+		origin, shooter_body.global_position, force, radius
+	)
+	var h_dir: Vector3 = forces.horizontal_dir
+	var h_force: float = forces.horizontal_force
+	var v_force: float = forces.vertical_force
+
+	if shooter_body.has_method("apply_rocket_jump_knockback"):
+		shooter_body.call("apply_rocket_jump_knockback", h_dir, h_force, v_force)
+	elif shooter_body is RigidBody3D:
+		_apply_rigidbody_explosion_impulse(
+			shooter_body as RigidBody3D,
+			h_dir,
+			h_force,
+			v_force,
+			shooter_body.global_position
+		)
+	else:
+		return
+
+	if WeaponDefs.SELF_EXPLOSION_DAMAGE_MULTIPLIER <= 0.0:
+		return
+
+	var falloff: float = 1.0 - clampf(dist / radius, 0.0, 1.0)
+	var self_damage: int = int(
+		round(
+			float(explosion_damage)
+			* falloff
+			* WeaponDefs.SELF_EXPLOSION_DAMAGE_MULTIPLIER
+		)
+	)
+	if self_damage <= 0:
+		return
+	var blast_dir: Vector3 = blast_dir_from(origin, shooter_body)
+	if shooter_body.has_method("take_damage"):
+		shooter_body.call(
+			"take_damage", self_damage, shooter, blast_dir, h_force, "bazooka_explosion"
+		)
+	elif shooter_body.has_node("CombatStats"):
+		var stats: CombatStats = shooter_body.get_node("CombatStats") as CombatStats
+		stats.record_hit(blast_dir, h_force, shooter, "bazooka_explosion")
+		stats.apply_damage(self_damage, shooter)
+
+
+static func compute_rocket_jump_forces(
+	origin: Vector3, target_position: Vector3, force: float, radius: float
+) -> Dictionary:
+	var scaled_force: float = force * WeaponDefs.SELF_EXPLOSION_KNOCKBACK_MULTIPLIER
+	var base: Dictionary = compute_explosion_forces(origin, target_position, scaled_force, radius)
+	var distance: float = origin.distance_to(target_position)
+	var falloff: float = 1.0 - clampf(distance / radius, 0.0, 1.0)
+	base.vertical_force += WeaponDefs.ROCKET_JUMP_UPWARD_BOOST * falloff
+	return base
+
+
+static func blast_dir_from(origin: Vector3, target: Node3D) -> Vector3:
+	var blast_dir: Vector3 = target.global_position - origin
+	if blast_dir.length_squared() < 0.001:
+		return Vector3.UP
+	return blast_dir.normalized()

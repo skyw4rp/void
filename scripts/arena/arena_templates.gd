@@ -112,6 +112,7 @@ static func _split_platforms() -> ArenaTemplate:
 	t.floor_pieces = [
 		ArenaTemplate.slab(13.0, th, 20.0, -10.0, hy, 0.0),
 		ArenaTemplate.slab(13.0, th, 20.0, 10.0, hy, 0.0),
+		ArenaTemplate.slab(8.0, th, 6.0, 0.0, hy, 0.0),
 		ArenaTemplate.slab(6.0, th, 4.0, -10.0, hy, 8.5),
 		ArenaTemplate.slab(6.0, th, 4.0, 10.0, hy, 8.5),
 		ArenaTemplate.slab(6.0, th, 4.0, -10.0, hy, -8.5),

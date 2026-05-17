@@ -1,30 +1,41 @@
-## Large destructible cover piece — blocks shots until destroyed.
+## Large destructible cover piece — blocks shots until destroyed (RigidBody cover).
 class_name DebrisChunk
 extends RigidBody3D
 
 enum CoverType { BLOCK, WALL_SLAB, BROKEN_PILLAR, FALLEN_BEAM }
 
+const COVER_TO_WALL: Dictionary = {
+	CoverType.BLOCK: DestructibleWall.WallKind.HALF,
+	CoverType.WALL_SLAB: DestructibleWall.WallKind.THIN_SLAB,
+	CoverType.BROKEN_PILLAR: DestructibleWall.WallKind.PILLAR,
+	CoverType.FALLEN_BEAM: DestructibleWall.WallKind.THIN_SLAB,
+}
+
 const VOID_Y: float = GameBalance.VOID_DEATH_Y
 const DECK_TOP_Y: float = 0.14
-
-const COVER_HEALTH: Dictionary = {
-	CoverType.BLOCK: 60,
-	CoverType.WALL_SLAB: 100,
-	CoverType.BROKEN_PILLAR: 80,
-	CoverType.FALLEN_BEAM: 70,
-}
 
 @onready var _mesh: MeshInstance3D = $MeshInstance3D
 @onready var _shape: CollisionShape3D = $CollisionShape3D
 
 var _cover_type: CoverType = CoverType.BLOCK
-var _max_health: int = 60
-var _cover_health: int = 60
+var _wall_kind: DestructibleWall.WallKind = DestructibleWall.WallKind.HALF
+var _max_health: int = 80
+var _cover_health: int = 80
+var _piece_size: Vector3 = Vector3.ONE
 var _broken: bool = false
+var _destroying: bool = false
+var _base_material: StandardMaterial3D
+var _last_hit_world: Vector3 = Vector3.ZERO
+var _last_hit_direction: Vector3 = Vector3.ZERO
+var _last_damage_source: String = ""
+
+var is_perforable: bool = false
+var railgun_holes: Array = []
 
 
 func _ready() -> void:
 	add_to_group("round_debris")
+	add_to_group(DestructibleWall.DESTRUCTIBLE_GROUP)
 	collision_layer = 1
 	collision_mask = 1
 	var body_mat := PhysicsMaterial.new()
@@ -37,16 +48,21 @@ func _ready() -> void:
 
 func setup_cover(cover_type: CoverType) -> void:
 	_cover_type = cover_type
-	_max_health = COVER_HEALTH.get(cover_type, 60)
+	_wall_kind = COVER_TO_WALL.get(cover_type, DestructibleWall.WallKind.HALF)
+	name = "DestructibleWall_%s" % DestructibleWall.kind_display_name(_wall_kind)
+	_max_health = DestructibleWall.HEALTH.get(_wall_kind, 80)
 	_cover_health = _max_health
-
+	add_to_group(DestructibleWall.DESTRUCTIBLE_GROUP)
 	var scale_vec: Vector3 = _scale_for_type(cover_type)
+	_piece_size = scale_vec
 	_mesh.scale = scale_vec
 	if _shape.shape is BoxShape3D:
 		(_shape.shape as BoxShape3D).size = scale_vec
 
 	mass = _mass_for_type(cover_type)
-	_mesh.material_override = _material_for_type(cover_type)
+	var mat: StandardMaterial3D = _material_for_type(cover_type)
+	_mesh.material_override = mat
+	_base_material = mat
 	rotation = _rotation_for_type(cover_type)
 
 	global_position.y = DECK_TOP_Y + scale_vec.y * 0.5
@@ -54,30 +70,44 @@ func setup_cover(cover_type: CoverType) -> void:
 	angular_velocity = _spin_for_type(cover_type)
 
 
+func is_destructible_wall() -> bool:
+	return true
+
+
+func get_piece_size() -> Vector3:
+	return _piece_size
+
+
+func add_railgun_perforation(
+	_hit_world: Vector3, _beam_dir: Vector3, _surface_normal: Vector3
+) -> bool:
+	return false
+
+
+func get_wall_kind() -> DestructibleWall.WallKind:
+	return _wall_kind
+
+
 func damage_cover(
 	amount: int,
 	_attacker: Node = null,
 	direction: Vector3 = Vector3.ZERO,
 	force: float = 0.0,
-	source: String = ""
+	source: String = "",
+	hit_origin: Vector3 = Vector3.ZERO,
+	blast_radius: float = 0.0
 ) -> void:
-	if _broken or amount <= 0:
+	if _broken or _destroying or amount <= 0:
 		return
 
-	var damage_mult: float = 1.0
-	match source:
-		"bazooka_explosion":
-			damage_mult = 1.65
-		"bazooka_direct":
-			damage_mult = 1.3
-		"shotgun":
-			damage_mult = 0.85
+	_record_hit(hit_origin, direction, source)
 
-	_cover_health = maxi(0, _cover_health - int(round(float(amount) * damage_mult)))
-	print(
-		"Cover health: %d / %d (%s, hit by %s)"
-		% [_cover_health, _max_health, _type_label(), source if source != "" else "weapon"]
+	var damage: int = DestructibleWall.resolve_weapon_damage(
+		source, amount, hit_origin, global_position, blast_radius
 	)
+	_cover_health = maxi(0, _cover_health - damage)
+	_update_damage_stage()
+	print("Wall damaged: %s health %d/%d" % [name, _cover_health, _max_health])
 
 	if force > 0.0 and direction.length_squared() > 0.001:
 		var offset: Vector3 = direction.normalized() * 0.2
@@ -86,26 +116,69 @@ func damage_cover(
 		)
 
 	if _cover_health <= 0:
-		_break_apart()
+		break_apart(direction, force)
 
 
-func _break_apart() -> void:
-	if _broken:
+func _record_hit(hit_origin: Vector3, direction: Vector3, source: String) -> void:
+	if hit_origin.length_squared() > 0.001:
+		_last_hit_world = hit_origin
+	elif direction.length_squared() > 0.001:
+		_last_hit_world = global_position + direction.normalized() * 0.5
+	else:
+		_last_hit_world = global_position
+	if direction.length_squared() > 0.001:
+		_last_hit_direction = direction.normalized()
+	_last_damage_source = source
+
+
+func _update_damage_stage() -> void:
+	if _max_health <= 0 or _base_material == null:
+		return
+	var ratio: float = float(_cover_health) / float(_max_health)
+	WallDestruction.apply_damage_visual(self, _base_material, ratio)
+
+
+func break_apart(hit_direction: Vector3 = Vector3.ZERO, _force: float = 0.0) -> void:
+	if _broken or _destroying:
 		return
 	_broken = true
+	_destroying = true
+
+	if hit_direction.length_squared() > 0.001:
+		_last_hit_direction = hit_direction.normalized()
+
 	var parent: Node = get_parent()
 	if parent == null:
 		parent = get_tree().current_scene
-	var mat: StandardMaterial3D = _mesh.material_override as StandardMaterial3D
-	var count: int = randi_range(4, 8)
-	DebrisFragment.spawn_burst(parent, global_position, count, mat)
-	print("Cover destroyed: %s" % _type_label())
-	queue_free()
+
+	var payload := BreakPayload.new()
+	payload.parent = parent
+	payload.wall_node = self
+	payload.wall_name = name
+	payload.piece_size = _piece_size
+	payload.kind = _wall_kind
+	payload.material = _base_material.duplicate() if _base_material else null
+	payload.hit_world = _last_hit_world
+	payload.hit_direction = _last_hit_direction
+	payload.damage_source = _last_damage_source
+
+	WallDestruction.start_staged_break(self, payload)
 
 
 func _physics_process(_delta: float) -> void:
 	if global_position.y < VOID_Y - 2.0:
 		queue_free()
+
+
+func _type_label_for(cover_type: CoverType) -> String:
+	match cover_type:
+		CoverType.WALL_SLAB:
+			return "WallSlab"
+		CoverType.BROKEN_PILLAR:
+			return "Pillar"
+		CoverType.FALLEN_BEAM:
+			return "Beam"
+	return "Block"
 
 
 func _type_label() -> String:

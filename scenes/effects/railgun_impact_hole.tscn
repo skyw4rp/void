@@ -1,0 +1,24 @@
+[gd_scene format=3 uid="uid://cs5svbdw43gtg"]
+
+[ext_resource type="Script" path="res://scripts/effects/railgun_impact_hole.gd" id="1_script"]
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_hole"]
+albedo_color = Color(0.04, 0.04, 0.06, 1)
+emission_enabled = true
+emission = Color(0.35, 0.22, 0.55, 1)
+emission_energy_multiplier = 0.45
+roughness = 0.95
+
+[sub_resource type="CylinderMesh" id="CylinderMesh_hole"]
+top_radius = 0.5
+bottom_radius = 0.5
+height = 0.08
+radial_segments = 16
+rings = 1
+
+[node name="RailgunImpactHole" type="Node3D"]
+script = ExtResource("1_script")
+
+[node name="Disc" type="MeshInstance3D" parent="."]
+mesh = SubResource("CylinderMesh_hole")
+material_override = SubResource("StandardMaterial3D_hole")

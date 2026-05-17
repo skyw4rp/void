@@ -1,0 +1,40 @@
+[gd_scene format=3 uid="uid://csqi1r3hvsnu3"]
+
+[ext_resource type="Script" path="res://scripts/effects/railgun_impact_flash.gd" id="1_script"]
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_core"]
+albedo_color = Color(0.75, 0.9, 1, 0.85)
+emission_enabled = true
+emission = Color(0.45, 0.75, 1, 1)
+emission_energy_multiplier = 2.8
+shading_mode = 1
+
+[sub_resource type="SphereMesh" id="SphereMesh_core"]
+radius = 0.1
+height = 0.2
+radial_segments = 12
+rings = 8
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_sparks"]
+albedo_color = Color(0.9, 0.95, 1, 0.6)
+emission_enabled = true
+emission = Color(0.6, 0.85, 1, 1)
+emission_energy_multiplier = 1.6
+shading_mode = 1
+
+[sub_resource type="SphereMesh" id="SphereMesh_sparks"]
+radius = 0.16
+height = 0.32
+radial_segments = 10
+rings = 6
+
+[node name="RailgunImpactFlash" type="Node3D"]
+script = ExtResource("1_script")
+
+[node name="Core" type="MeshInstance3D" parent="."]
+mesh = SubResource("SphereMesh_core")
+material_override = SubResource("StandardMaterial3D_core")
+
+[node name="Sparks" type="MeshInstance3D" parent="."]
+mesh = SubResource("SphereMesh_sparks")
+material_override = SubResource("StandardMaterial3D_sparks")

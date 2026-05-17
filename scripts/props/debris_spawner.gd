@@ -50,6 +50,9 @@ func spawn_round_debris_for_generator(generator: ArenaGenerator) -> void:
 		if pos == Vector3.INF:
 			continue
 
+		if generator.has_method("is_near_main_route") and generator.is_near_main_route(pos, 2.4):
+			continue
+
 		var local_x: float = pos.x - arena_center.x
 		var xz := Vector2(pos.x, pos.z)
 		placed_xz.append(xz)

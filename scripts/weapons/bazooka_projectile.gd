@@ -55,7 +55,7 @@ func _on_body_entered(body: Node3D) -> void:
 	):
 		pass
 	else:
-		print("Bazooka: hit '%s' — exploding" % body.name)
+		print("Bazooka: hit '%s' — exploding" % PushHitResolver.describe_body(body))
 
 	_explode()
 	_despawn()

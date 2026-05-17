@@ -6,10 +6,18 @@ const MAX_GENERATION_ATTEMPTS: int = 6
 const SPAWN_RAY_START_HEIGHT: float = 24.0
 const SPAWN_STAND_HEIGHT: float = 1.0
 const FLOOR_RAY_MASK: int = 1
+const SPAWN_PAD_SCENE: PackedScene = preload("res://scenes/props/spawn_pad.tscn")
 
-@export var debug_show_markers: bool = true
+@export var debug_show_markers: bool = false
+@export var debug_show_spawn_markers: bool = false
+@export var debug_show_route: bool = false
+
+var _route_path_world: PackedVector3Array = PackedVector3Array()
+var _last_route_cells: Array[Vector2i] = []
+var _last_route_grid = null
 
 @onready var _active_arena: Node3D = $ActiveArena
+@onready var _spawn_pads: Node3D = $SpawnPads
 @onready var _debug_markers: Node3D = $DebugMarkers
 
 var _template: ArenaTemplate
@@ -23,6 +31,7 @@ var _enemy_spawn_position: Vector3 = Vector3.ZERO
 func _ready() -> void:
 	add_to_group("arena_generator")
 	_clear_active_arena()
+	_clear_spawn_pads()
 	_clear_debug_markers()
 
 
@@ -79,8 +88,23 @@ func get_enemy_spawn_position() -> Vector3:
 	return _enemy_spawn_position
 
 
+func get_route_path_points() -> PackedVector3Array:
+	return _route_path_world
+
+
+func is_near_main_route(world_pos: Vector3, min_distance: float = 2.2) -> bool:
+	if _route_path_world.is_empty():
+		return false
+	var xz := Vector2(world_pos.x, world_pos.z)
+	for point in _route_path_world:
+		if xz.distance_to(Vector2(point.x, point.z)) < min_distance:
+			return true
+	return false
+
+
 func generate_round_arena_async() -> bool:
 	_clear_active_arena()
+	_clear_spawn_pads()
 	_clear_debug_markers()
 
 	var playable: Array[int] = ArenaTemplates.get_playable_ids()
@@ -91,24 +115,36 @@ func generate_round_arena_async() -> bool:
 	for attempt in MAX_GENERATION_ATTEMPTS:
 		var template_id: int = _pick_template_id(playable)
 		_template = ArenaTemplates.get_template(template_id as ArenaTemplates.Id)
+		_route_path_world = PackedVector3Array()
+		_last_route_cells.clear()
+		_last_route_grid = null
+
+		if not _ensure_template_has_route():
+			print("Route invalid after connector, regenerating arena")
+			continue
+
 		ArenaStructureBuilder.build(_active_arena, _template)
 		await get_tree().physics_frame
 
-		if _validate_and_finalize_spawns():
+		if _finalize_route_and_spawns():
+			_place_spawn_pads()
 			print("Spawn validation passed")
 			print("Round arena selected: %s" % _template.arena_name)
 			_last_arena_name = _template.arena_name
 			_update_debug_markers()
 			return true
 
-		print("Spawn invalid, regenerating arena")
+		print("Spawn or route invalid, regenerating arena")
 		_clear_active_arena()
 
 	# Last resort: force toxic bridge.
 	_template = ArenaTemplates.get_template(ArenaTemplates.Id.TOXIC_BRIDGE)
+	_route_path_world = PackedVector3Array()
+	_ensure_template_has_route()
 	ArenaStructureBuilder.build(_active_arena, _template)
 	await get_tree().physics_frame
-	if _validate_and_finalize_spawns():
+	if _finalize_route_and_spawns():
+		_place_spawn_pads()
 		print("Spawn validation passed (fallback Toxic Bridge)")
 		print("Round arena selected: %s" % _template.arena_name)
 		_last_arena_name = _template.arena_name
@@ -121,6 +157,7 @@ func generate_round_arena_async() -> bool:
 
 func clear_active_arena() -> void:
 	_clear_active_arena()
+	_clear_spawn_pads()
 	_clear_debug_markers()
 	_template = null
 
@@ -218,6 +255,33 @@ func _pick_template_id(playable: Array[int]) -> int:
 	return candidates.pick_random()
 
 
+func _ensure_template_has_route() -> bool:
+	var result: Dictionary = ArenaRouteValidator.validate_template(_template)
+	if result.passed:
+		_store_route_result(result)
+		return true
+	ArenaConnectorBuilder.append_connector_floor(_template)
+	result = ArenaRouteValidator.validate_template(_template)
+	if result.passed:
+		_store_route_result(result)
+	return result.passed
+
+
+func _finalize_route_and_spawns() -> bool:
+	var result: Dictionary = ArenaRouteValidator.validate_template(_template)
+	if not result.passed:
+		return false
+	_store_route_result(result)
+	print("Route validation passed")
+	return _validate_and_finalize_spawns()
+
+
+func _store_route_result(result: Dictionary) -> void:
+	_last_route_grid = result.grid
+	_last_route_cells = (result.path as Array).duplicate()
+	_route_path_world = ArenaRouteValidator.path_to_world_points(_template, _last_route_cells)
+
+
 func _validate_and_finalize_spawns() -> bool:
 	var center: Vector3 = _template.center_position
 	var player_local: Vector3 = _template.player_spawn_local
@@ -283,6 +347,47 @@ func _clear_active_arena() -> void:
 		child.queue_free()
 
 
+func _clear_spawn_pads() -> void:
+	if _spawn_pads == null:
+		return
+	for child in _spawn_pads.get_children():
+		child.queue_free()
+
+
+func _place_spawn_pads() -> void:
+	_clear_spawn_pads()
+	if _spawn_pads == null or _template == null:
+		return
+
+	var player_floor: Vector3 = _floor_point_at(_player_spawn_position)
+	var enemy_floor: Vector3 = _floor_point_at(_enemy_spawn_position)
+
+	var player_pad: SpawnPad = SPAWN_PAD_SCENE.instantiate() as SpawnPad
+	_spawn_pads.add_child(player_pad)
+	player_pad.setup(SpawnPad.Team.PLAYER, player_floor, _enemy_spawn_position)
+
+	var enemy_pad: SpawnPad = SPAWN_PAD_SCENE.instantiate() as SpawnPad
+	_spawn_pads.add_child(enemy_pad)
+	enemy_pad.setup(SpawnPad.Team.ENEMY, enemy_floor, _player_spawn_position)
+
+	_player_spawn_position = player_pad.get_stand_position()
+	_enemy_spawn_position = enemy_pad.get_stand_position()
+	_player_spawn_transform = _spawn_transform_facing(
+		_player_spawn_position, _enemy_spawn_position
+	)
+	_enemy_spawn_transform = _spawn_transform_facing(
+		_enemy_spawn_position, _player_spawn_position
+	)
+	print("Spawn pads placed")
+
+
+func _floor_point_at(world_pos: Vector3) -> Vector3:
+	var hit: Variant = raycast_floor_at(world_pos.x, world_pos.z)
+	if hit != null and hit is Dictionary:
+		return (hit as Dictionary).position as Vector3
+	return Vector3(world_pos.x, world_pos.y - SPAWN_STAND_HEIGHT, world_pos.z)
+
+
 func _clear_debug_markers() -> void:
 	if _debug_markers == null:
 		return
@@ -292,12 +397,19 @@ func _clear_debug_markers() -> void:
 
 func _update_debug_markers() -> void:
 	_clear_debug_markers()
-	if not debug_show_markers or _template == null:
+	if _template == null:
 		return
 
-	_add_debug_sphere(_player_spawn_position, Color(0.2, 0.95, 0.35), 0.35)
-	_add_debug_sphere(_enemy_spawn_position, Color(0.95, 0.25, 0.2), 0.35)
+	if debug_show_spawn_markers:
+		_add_debug_sphere(_player_spawn_position, Color(0.2, 0.95, 0.35), 0.35)
+		_add_debug_sphere(_enemy_spawn_position, Color(0.95, 0.25, 0.2), 0.35)
+
+	if not debug_show_markers:
+		return
+
 	_draw_bounds_markers()
+	if debug_show_route:
+		_draw_route_debug()
 
 
 func _add_debug_sphere(position: Vector3, color: Color, radius: float) -> void:
@@ -314,6 +426,35 @@ func _add_debug_sphere(position: Vector3, color: Color, radius: float) -> void:
 	mesh_inst.material_override = mat
 	mesh_inst.global_position = position
 	_debug_markers.add_child(mesh_inst)
+
+
+func _draw_route_debug() -> void:
+	if _last_route_grid == null or not _last_route_grid.has_bounds:
+		return
+	var center: Vector3 = _template.center_position
+	var path_cells: Dictionary = {}
+	for cell in _last_route_cells:
+		path_cells[cell] = true
+
+	for x in range(_last_route_grid.min_cell.x, _last_route_grid.max_cell.x + 1):
+		for z in range(_last_route_grid.min_cell.y, _last_route_grid.max_cell.y + 1):
+			var cell := Vector2i(x, z)
+			var local: Vector2 = Vector2(
+				(float(cell.x) + 0.5) * ArenaRouteValidator.CELL_SIZE,
+				(float(cell.y) + 0.5) * ArenaRouteValidator.CELL_SIZE
+			)
+			var world := Vector3(center.x + local.x, 0.12, center.z + local.y)
+			var traversable: bool = (
+				_last_route_grid.walkable.has(cell)
+				and not _last_route_grid.blocked.has(cell)
+			)
+			var on_path: bool = path_cells.has(cell)
+			if on_path:
+				_add_debug_sphere(world, Color(0.2, 0.95, 0.35), 0.14)
+			elif traversable:
+				_add_debug_sphere(world, Color(0.25, 0.55, 0.95, 0.35), 0.1)
+			else:
+				_add_debug_sphere(world, Color(0.95, 0.2, 0.2, 0.35), 0.08)
 
 
 func _draw_bounds_markers() -> void:

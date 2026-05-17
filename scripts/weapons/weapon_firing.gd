@@ -40,35 +40,99 @@ static func _fire_railgun(
 	shooter: Node
 ) -> void:
 	var range_max: float = stats.get("range", 120.0)
-	var end_pos: Vector3 = origin + direction * range_max
-	var hit_pos: Vector3 = end_pos
-	var hit_body: Node = null
+	var dir: Vector3 = direction.normalized()
+	var max_pierce: int = stats.get("max_pierce_hits", 8)
+	var pierce_offset: float = stats.get("pierce_step_offset", 0.05)
+	var damage: int = stats.get("damage", 100)
+	var push_force: float = stats.get("push_force", 68.0)
+	var source: String = stats.get("damage_source", "railgun")
+	var beam_color: Color = stats.get("beam_color", Color(0.55, 0.88, 1.0))
+	var beam_emission: Color = stats.get("beam_emission", Color(0.4, 0.72, 1.0))
+
+	var beam_end: Vector3 = origin + dir * range_max
+	var pierced_fighters: Dictionary = {}
+	var ray_origin: Vector3 = origin
+	var traveled: float = 0.0
+	var pierce_count: int = 0
+	var stopped_on_fighter: bool = false
 
 	var space: PhysicsDirectSpaceState3D = scene_root.get_world_3d().direct_space_state
 	if space:
-		var query := PhysicsRayQueryParameters3D.create(origin, end_pos)
-		query.collide_with_areas = true
-		query.collide_with_bodies = true
-		query.collision_mask = 1
-		query.exclude = _ray_exclude_rids(shooter)
-		var result: Dictionary = space.intersect_ray(query)
-		if not result.is_empty():
-			hit_pos = result.position
-			hit_body = result.collider as Node
+		var exclude: Array[RID] = _ray_exclude_rids(shooter)
+		while pierce_count < max_pierce and traveled < range_max - 0.01:
+			var remaining: float = range_max - traveled
+			var ray_end: Vector3 = ray_origin + dir * remaining
+			var query := PhysicsRayQueryParameters3D.create(ray_origin, ray_end)
+			query.collide_with_areas = true
+			query.collide_with_bodies = true
+			query.collision_mask = 1
+			query.exclude = exclude
 
-	var beam_color: Color = stats.get("beam_color", Color(0.72, 0.55, 1.0))
-	var beam_emission: Color = stats.get("beam_emission", Color(0.45, 0.25, 0.95))
-	BeamTracer.spawn(
-		scene_root, origin, hit_pos, beam_color, beam_emission, hit_body != null
-	)
+			var result: Dictionary = space.intersect_ray(query)
+			if result.is_empty():
+				beam_end = ray_end
+				break
 
-	if hit_body != null and not PushHitResolver.is_shooter(hit_body, shooter):
-		var damage: int = stats.get("damage", 100)
-		var push_force: float = stats.get("push_force", 68.0)
-		var source: String = stats.get("damage_source", "railgun")
-		PushHitResolver.apply_railgun_hit(
-			hit_body, direction, push_force, hit_pos, damage, shooter, source
-		)
+			var hit_pos: Vector3 = result.position
+			var hit_normal: Vector3 = result.normal
+			var collider: Object = result.collider
+			beam_end = hit_pos
+
+			var body: Node = PushHitResolver.resolve_hit_body(collider as Node)
+			if body != null and not PushHitResolver.is_shooter(body, shooter):
+				var body_name: String = PushHitResolver.describe_body(body)
+				if PushHitResolver.is_combat_fighter(body):
+					var fighter_id: int = body.get_instance_id()
+					if not pierced_fighters.has(fighter_id):
+						pierced_fighters[fighter_id] = true
+						PushHitResolver.apply_railgun_hit(
+							body, dir, push_force, hit_pos, damage, shooter, source
+						)
+					RailgunImpactFlash.spawn(scene_root, hit_pos, hit_normal, beam_emission)
+					print("Railgun pierced: %s" % body_name)
+					stopped_on_fighter = true
+					break
+				if _spawn_railgun_pierce_marks(
+					body, hit_pos, hit_normal, dir, scene_root, beam_emission
+				):
+					print("Railgun pierced: %s" % body_name)
+				else:
+					RailgunImpactFlash.spawn(scene_root, hit_pos, hit_normal, beam_emission)
+					print("Railgun pierced: %s" % body_name)
+
+			if collider is CollisionObject3D:
+				exclude.append((collider as CollisionObject3D).get_rid())
+
+			var step: float = maxf(ray_origin.distance_to(hit_pos), 0.001) + pierce_offset
+			traveled += step
+			ray_origin = hit_pos + dir * pierce_offset
+			pierce_count += 1
+
+		if not stopped_on_fighter:
+			beam_end = origin + dir * range_max
+
+	BeamTracer.spawn(scene_root, origin, beam_end, beam_color, beam_emission)
+
+
+static func _spawn_railgun_pierce_marks(
+	body: Node,
+	hit_pos: Vector3,
+	hit_normal: Vector3,
+	beam_dir: Vector3,
+	scene_root: Node,
+	beam_emission: Color
+) -> bool:
+	if not body is Node3D:
+		return false
+	if not (
+		PushHitResolver.is_destructible_wall(body)
+		or body.is_in_group("round_debris")
+	):
+		return false
+	var host: Node3D = body as Node3D
+	RailgunPierceMark.spawn_entry_on_host(host, hit_pos, hit_normal, beam_dir)
+	RailgunImpactFlash.spawn(scene_root, hit_pos, hit_normal, beam_emission)
+	return true
 
 
 static func _ray_exclude_rids(shooter: Node) -> Array[RID]:

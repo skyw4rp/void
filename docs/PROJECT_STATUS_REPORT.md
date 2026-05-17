@@ -121,11 +121,12 @@ Player: `WeaponManager` on camera. Enemy: `EnemyWeaponManager` on weapon pivot.
 | **Damage** | **100** per hit (shield absorbs first; no overflow on first hit at full shield) |
 | **TTK** | Hit 1: shield **100 → 0**, health stays **100**; hit 2: health **100 → 0** (kill) |
 | **Knockback** | **68** (`apply_railgun_hit`, mostly horizontal, low vertical via `RAILGUN_VERTICAL_FACTOR`) |
-| **Cooldown** | **0.95 s** |
-| **Range** | **120** units raycast |
-| **Delivery** | Instant ray from camera; no spread |
-| **Feedback** | `Shield broken by Railgun` console log; cyan stats/crosshair flash on full shield break |
-| **Visual** | `BeamTracer` — blue/purple line **0.08–0.15 s**; small impact flash |
+| **Cooldown** | **1.6 s** (deliberate heavy precision cadence) |
+| **Range** | **120** units; iterative pierce ray (**8** max hits, **0.05** offset) |
+| **Delivery** | Instant ray; pierces walls/cover; stops on first fighter per shot |
+| **Wall interaction** | **0** wall damage; mechanical pierce; **entry-only** portal marks (parented, 8–12 s fade) |
+| **Feedback** | `Shield broken by Railgun`; `Railgun pierced:` / `Railgun hole spawned at position` debug logs |
+| **Visual** | `BeamTracer` through pierced surfaces to max range (impact flash on fighter hit only) |
 | **AI** | Long range with LOS; aim error (~**0.65** m); slower fire cadence; not every long-range tick picks railgun |
 
 ### Shotgun (slot 2)
@@ -151,7 +152,37 @@ Player: `WeaponManager` on camera. Enemy: `EnemyWeaponManager` on weapon pivot.
 | **Cooldown** | **1.4 s** |
 | **Projectile** | `bazooka_projectile.tscn`, speed **22**, lifetime **4 s** (slower than railgun beam) |
 | **Explosion** | Radius **5.0** — `PushExplosion.detonate` |
+| **Rocket jump** | Self-blast only: **0.35×** knockback, **+6** upward boost, caps **12** Y / **22** horizontal; **0** self-damage; enemy splash unchanged |
 | **AI** | Medium / ring-out only (~**26–40%** pick); longer fire interval; not spammed at 100 direct dmg |
+
+### Destructible walls
+
+| Component | Script | Notes |
+|-----------|--------|-------|
+| Inner template walls | `destructible_wall.gd` | All `wall_pieces`; named `DestructibleWall_*` |
+| Perimeter | `destructible_wall.gd` | All collision panels; OUTER_HEAVY **200** HP |
+| Round cover | `debris_chunk.gd` | Same damage resolver; avoids main route |
+| Floors | `StructuralFloor_*` / `StructuralConnector_*` | `structural_geometry` group; unique names (no duplicate `StructuralFloor`) |
+| Walls | `DestructibleWall_<Type>_<index>` | `destructible_wall` group; crumble to local rubble |
+
+**Route validation:** `arena_route_validator.gd` BFS on floor grid; connector fallback; spawn clearance **3** cells (~3 m). `debug_show_route` on `ArenaGenerator`.
+
+| Wall kind | HP |
+|-----------|-----|
+| Half | 80 |
+| Full | 140 |
+| Pillar | 120 |
+| Thin slab | 70 |
+| Outer heavy | 200 |
+
+| Weapon | Wall damage |
+|--------|-------------|
+| Railgun | 0 (marks only; pierces) |
+| Shotgun pellet | 8 |
+| Bazooka direct | 120 |
+| Bazooka explosion | 90 max (falloff) |
+
+Break → staged fracture (`wall_destruction.gd`): crack visual → brief hold → **8–40** volume-placed chunks → fade/remove host. Impact-aware local collapse; fragment protection **0.25 s**; lifetime **6–10 s**.
 
 ### Shared systems
 
@@ -161,8 +192,14 @@ Player: `WeaponManager` on camera. Enemy: `EnemyWeaponManager` on weapon pivot.
 | `weapon_manager.gd` / `enemy_weapon_manager.gd` | Switching, cooldown, fire |
 | `weapon_firing.gd` | Ray, pellets, bazooka spawn |
 | `push_hit_resolver.gd` | Damage routing, knockback, explosions, railgun, cover `damage_cover` |
-| `push_explosion.gd` | Sphere query explosion |
-| `beam_tracer.gd` | Railgun VFX |
+| `push_explosion.gd` | Sphere query explosion + shooter rocket jump |
+| `destructible_wall.gd` | Wall HP, damage stages, `damage_cover` |
+| `wall_destruction.gd` | Staged fracture, chunk count/placement, impact impulses |
+| `beam_tracer.gd` | Primary railgun beam VFX (bright cyan/blue, short-lived) |
+| `railgun_pierce_mark.gd` | Entry-only energy rings on pierced walls (exit marks removed) |
+| `railgun_impact_flash.gd` | Brief hit flash on fighters / fallback |
+| `railgun_impact_hole.gd` | **Deprecated** |
+| `perforable_wall_grid.gd` / `railgun_wall_perforation.gd` | **Deprecated** (no geometry removal) |
 
 ---
 
@@ -177,6 +214,11 @@ Player: `WeaponManager` on camera. Enemy: `EnemyWeaponManager` on weapon pivot.
 | `GROUNDED_UPWARD_KNOCKBACK_FACTOR` | **0.10** |
 | `AIRBORNE_UPWARD_KNOCKBACK_FACTOR` | **0.025** |
 | `RAILGUN_VERTICAL_FACTOR` | **0.06** |
+| `SELF_EXPLOSION_KNOCKBACK_MULTIPLIER` | **0.35** (self only) |
+| `SELF_EXPLOSION_DAMAGE_MULTIPLIER` | **0.0** |
+| `ROCKET_JUMP_UPWARD_BOOST` | **6** |
+| `MAX_ROCKET_JUMP_UPWARD_VELOCITY` | **12** |
+| `MAX_ROCKET_JUMP_HORIZONTAL_VELOCITY` | **22** |
 | `PROJECTILE_HIT_VERTICAL_FACTOR` | **0.22** (bazooka direct) |
 | `EXPLOSION_VERTICAL_FACTOR` | **0.18** |
 | `EXPLOSION_MAX_UPWARD_FORCE` | **18** |
@@ -367,7 +409,9 @@ These exist on disk but **`main.tscn` does not use them** for gameplay:
 
 ### Debug
 
-- `debug_show_markers` (default **true**): green = player spawn, red = enemy, blue = danger corners.
+- **Spawn pads** (`spawn_pad.gd`): Quake-inspired platforms at spawns; hidden debug spheres by default.
+- `debug_show_spawn_markers` (default **false**): green/red spawn debug only when enabled.
+- `debug_show_markers` (default **false**): danger bounds / route overlays.
 
 ### API for game systems
 
@@ -528,7 +572,7 @@ neon-catacombs/
 | HUD (score, HP, weapon) | Done | `arena_ui.gd` |
 | Void atmosphere | Done | Scene + script |
 | Distant architecture | Done | Silhouettes |
-| Debug spawn markers | Done | Optional export |
+| Spawn pads + optional debug markers | Done | Pads default; `debug_show_spawn_markers` |
 | Real audio | Partial | `void_audio.gd` prints placeholders |
 | Multiplayer | Not started | |
 | Main menu / pause | Not started | Esc frees mouse only |
@@ -556,7 +600,7 @@ neon-catacombs/
 
 | Weapon | Damage | Force / notes | Cooldown |
 |--------|--------|---------------|----------|
-| Railgun | 100 (2-hit kill) | push 68 | 0.95 s |
+| Railgun | 100 (2-hit kill) | push 68 | 1.6 s |
 | Shotgun | 10×7 pellets (mesh 0.12) | push 30/pellet | 0.75 s |
 | Bazooka direct | 100 (2-hit kill) | push 58 | 1.4 s |
 | Bazooka explosion | 60 max | force 82, radius 5 | — |

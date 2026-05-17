@@ -15,7 +15,7 @@ Godot 4.6 first-person **knock-off duel** across **large suspended arenas** over
 | Damage order | Damage hits **shield first**; overflow reduces **health** |
 | Round start | **3 → 2 → 1 → FIGHT!** countdown (1s per number, 0.7s for FIGHT!) |
 | During countdown | Player and AI **frozen** — no move, no shoot |
-| After point | Pick new arena → clear FX/debris → spawn cover → respawn at arena markers → countdown |
+| After point | Pick new arena → clear FX/debris → spawn cover → respawn on spawn pads → countdown |
 | Arena pick | **Random** each round (won’t repeat the same arena name back-to-back) |
 | Void score | Ring-out below **Y = -20** — **VOID_GORE** cinematic (~**3.2 s**) or legacy fall + burst, then +1 |
 | Kill score | You kill AI → player +1; AI kills you → enemy +1 |
@@ -66,14 +66,44 @@ Each template: `spawn_safe_half`, `fall_zones[]`, `perimeter.ringout_open_sides`
 - Procedural **partial shell** around danger bounds + margin
 - Piece types: full ruined wall, half wall, collapsed, cracked pillar, hanging panel
 - **Decor-only** corner towers and distant breakwall silhouettes (no collision)
-- Destructible panels: `arena_perimeter_panel.gd` — `damage_cover()`, fragments on break
-- Groups: `arena_wall`, `arena_perimeter` (AI cover), `arena_perimeter_decor` (visual only)
+- All walls/barriers/pillars/slabs/perimeter pieces use **`DestructibleWall`** (`destructible_wall` group) — named `DestructibleWall_Full`, `_Half`, `_Outer`, `_Pillar`, `_ThinSlab`. Anonymous `@StaticBody3D@*` names are **not allowed** for wall-like geometry.
+- Only **`StructuralFloor_*`** and **`StructuralConnector_*`** (`structural_geometry` group) are non-destructible floors/bridges.
+- Groups: `arena_wall`, `arena_perimeter` (AI cover), `arena_perimeter_decor` (visual only, no collision)
 
-**Adding a template:** implement a builder in `arena_templates.gd`, add to `get_playable_ids()`, deck top at **local y = 0** (`slab` helper: center y = `-thickness/2`).
+### Destructible arena walls (`scripts/arena/destructible_wall.gd`)
+
+- **Inner walls** from `arena_structure_builder.gd` — every `wall_pieces` slab is destructible (floors stay static).
+- **Perimeter walls** — all collision panels destructible; full ruined segments use **OUTER_HEAVY** (**200** HP).
+- **Round debris cover** — `debris_chunk.gd` shares the same damage table via `DestructibleWall.resolve_weapon_damage()`.
+
+| Wall kind | HP |
+|-----------|-----|
+| Half wall | **80** |
+| Full wall | **140** |
+| Pillar | **120** |
+| Thin slab | **70** |
+| Outer heavy | **200** |
+
+**Weapon vs walls** (`weapon_defs.gd`):
+
+| Source | Wall damage |
+|--------|-------------|
+| Railgun | **0** (mechanical pierce + **entry** energy marks, no wall HP) |
+| Shotgun pellet | **8** |
+| Bazooka direct | **120** |
+| Bazooka explosion | up to **90** (radius falloff) |
+
+**Staged destruction** (`wall_destruction.gd`): shotgun/bazooka break walls; **railgun does not** deal wall HP damage. **Railgun pierce marks** (`railgun_pierce_mark.gd`): **entry-only** cyan/purple burn rings on pierced surfaces (**8–12 s** fade, parented to host); exit marks removed (unreliable thickness). No mesh cut. **Beam** shows penetration; brief **impact flash** at each pierce. Real geometry holes postponed. (1) wall damage → crack visual, (2) hold **0.08–0.15 s**, (3) **8–40** chunks, (4) fade host. Floors stay `StructuralFloor_*` only.
+
+**Route validation** (`arena_route_validator.gd`): after template pick, a floor-grid **BFS** checks a walkable path from player spawn to enemy spawn (walls block cells; rocket jump does not count). On failure, `arena_connector_builder.gd` appends a **StructuralFloor** bridge (≥ **4** u wide). Logs: `Route validation passed` or `Route invalid, adding connector`. Optional `debug_show_route` on `ArenaGenerator` draws green path / blue walkable / red blocked.
+
+**Adding a template:** implement a builder in `arena_templates.gd`, add to `get_playable_ids()`, deck top at **local y = 0** (`slab` helper: center y = `-thickness/2`). Every template must have a valid floor route (or accept auto-connector).
 
 ### Debug markers
 
-`ArenaGenerator.debug_show_markers` (default **true**): green sphere = player spawn, red = enemy, blue = danger bounds corners.
+**Spawn pads** (`spawn_pad.tscn`): Quake-style octagonal platforms at player/enemy spawns — dark metal base, glowing team ring (cyan / orange-red). Fighters spawn on pad tops facing each other. Regenerated each round.
+
+`ArenaGenerator.debug_show_spawn_markers` (default **false**): green/red debug spheres above spawns when enabled. `debug_show_markers` (default **false**): blue danger-bound corners / route debug.
 
 ### AI integration
 
@@ -87,8 +117,8 @@ Each countdown (including match start):
 2. Spawn **5–9** large `debris_chunk.tscn` cover pieces in the **active arena’s** debris zone (per-arena local X/Z rect), spread apart.
 3. Cover types (random): **BLOCK**, **WALL_SLAB** (tall LOS blocker), **BROKEN_PILLAR**, **FALLEN_BEAM** — each with its own scale, mass, material, and rotation.
 4. Spawn avoids player/enemy spawns (~**3.8** u) and limits pieces in the narrow center lane so at least one route around stays open.
-5. **Health** per type: Block **60**, Wall slab **100**, Pillar **80**, Beam **70**. Railgun, shotgun, and bazooka apply damage via `damage_cover()`; bazooka explosions deal extra damage.
-6. At **0 HP**: piece breaks into **4–8** small fragments (`round_debris_fragment`, **4–6 s** lifetime) then the cover is removed.
+5. **Health** uses shared wall kinds: Block → half **80**, Wall slab → thin **70**, Pillar **120**, Beam → thin **70**.
+6. At **0 HP**: same staged fracture as arena walls (crack → hold → proportional chunks → fade).
 7. Cover blocks physical shots and line of sight; weapons still apply knockback. Pieces can be pushed and knocked into the void.
 
 Debug: `Cover health: …`, `Cover destroyed: …`, `Spawned N destructible cover pieces…`
@@ -249,9 +279,18 @@ Gore is stylized sci-fi corruption (dark red/black chunks), not anatomical. Chun
 | **3** | **Bazooka** — slow rocket + explosion | Direct shield break; splash for ring-out |
 | **Left click** | Fire | |
 
-**Railgun** uses an instant ray (no spread, **120** unit range, **0.95 s** cooldown). **100** damage: first clean hit strips a full **100** shield; a second hit deals **100** health damage and kills. Strong mostly-horizontal knockback (**68** push) threatens ring-outs near edges. Shield break prints `Shield broken by Railgun` and triggers a cyan HUD/crosshair flash. A blue/purple/white **beam tracer** (~0.08–0.15 s) and a small impact flash show the hit.
+**Railgun** — piercing ray (**120** range, **1.6 s** cooldown, **8** pierce steps). **100** damage / **68** knockback on fighters; **0** wall HP. **Entry mark** per pierced wall + beam through trajectory. Shotgun/bazooka destroy cover.
 
-Shotgun and bazooka still use projectiles. All weapons apply **knockback and damage** (no self-damage). Crates still take push only.
+Shotgun and bazooka still use projectiles. Fighter weapons do not self-damage on direct hits; **bazooka explosions can rocket-jump the shooter** (see below). Crates still take push only.
+
+### Rocket jump (bazooka)
+
+Fire at the floor or a nearby wall to blast yourself upward/backward:
+
+- Shooter receives explosion knockback if inside blast radius (projectile direct hit on self still ignored).
+- Tuning (`weapon_defs.gd`): `SELF_EXPLOSION_KNOCKBACK_MULTIPLIER` **0.35**, `SELF_EXPLOSION_DAMAGE_MULTIPLIER` **0.0**, `ROCKET_JUMP_UPWARD_BOOST` **6**, caps **Y ≤ 12**, horizontal **≤ 22**. Enemy/cover explosion force is unchanged — only self-blast is reduced.
+- Controlled mobility (hop/backstep), not a arena-wide launch — **optional**; route validation guarantees reaching the enemy on foot without rocket jump.
+- AI: no intentional rocket jumps; may accidentally self-launch from own rockets (RigidBody impulse).
 
 ### Weapon damage & force (`weapon_defs.gd`)
 
@@ -290,7 +329,8 @@ Explosions use **mostly horizontal** push (ring-outs off the platform, not sky l
 
 - `EXPLOSION_VERTICAL_FACTOR` (0.18), `EXPLOSION_MAX_UPWARD_FORCE` (18), `EXPLOSION_MAX_DOWNWARD_FORCE` (8)
 - Horizontal blast uses full scaled force; vertical is computed separately and clamped
-- Player vertical velocity clamped to **-30 … 22** after any knockback (including explosions)
+- Player vertical velocity clamped to **-30 … 22** after normal knockback/explosions
+- Rocket jump uses separate caps (**Y ≤ 12**, horizontal **≤ 22**); typical hop ~**6–12** vertical, **10–22** horizontal
 - Direct bazooka rocket hits use a smaller vertical factor (`PROJECTILE_HIT_VERTICAL_FACTOR`)
 
 ## Balance tuning

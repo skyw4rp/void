@@ -6,6 +6,7 @@ extends RefCounted
 class FloorPiece:
 	var size: Vector3 = Vector3.ONE
 	var position: Vector3 = Vector3.ZERO  ## Slab center in arena-local space (deck top at y=0).
+	var is_connector: bool = false
 
 
 class WallPiece:

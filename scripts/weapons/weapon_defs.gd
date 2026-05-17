@@ -33,20 +33,49 @@ const PROJECTILE_HIT_VERTICAL_FACTOR: float = 0.22
 ## Railgun — precision knockback, minimal lift.
 const RAILGUN_VERTICAL_FACTOR: float = 0.06
 
+## Bazooka rocket jump (self-blast knockback).
+const SELF_EXPLOSION_KNOCKBACK_MULTIPLIER: float = 0.35
+const SELF_EXPLOSION_DAMAGE_MULTIPLIER: float = 0.0
+const ROCKET_JUMP_UPWARD_BOOST: float = 6.0
+const MAX_ROCKET_JUMP_UPWARD_VELOCITY: float = 12.0
+const MAX_ROCKET_JUMP_HORIZONTAL_VELOCITY: float = 22.0
+
+## Railgun modular wall perforation (see perforable_wall_grid.gd).
+const RAILGUN_HOLE_RADIUS: float = 0.18
+const RAILGUN_HOLE_DIAMETER: float = 0.36
+const RAILGUN_HOLE_MAX_CELLS: int = 7
+const RAILGUN_CELL_TARGET_SIZE: float = 0.25
+const RAILGUN_GRID_MIN_COLS: int = 6
+const RAILGUN_GRID_MAX_COLS: int = 24
+const RAILGUN_GRID_MIN_ROWS: int = 4
+const RAILGUN_GRID_MAX_ROWS: int = 16
+const RAILGUN_RIM_DIAMETER_MIN: float = 0.38
+const RAILGUN_RIM_DIAMETER_MAX: float = 0.45
+const RAILGUN_HOLE_WARN_COUNT: int = 8
+
+## Weapon damage vs destructible walls (fighter damage is separate).
+## Railgun marks walls but does not break them (use shotgun/bazooka for destruction).
+const WALL_DAMAGE_RAILGUN: int = 0
+const WALL_DAMAGE_SHOTGUN_PELLET: int = 8
+const WALL_DAMAGE_BAZOOKA_DIRECT: int = 120
+const WALL_DAMAGE_BAZOOKA_EXPLOSION_MAX: int = 90
+
 const DEFAULT_MAX_HEALTH: int = 100
 const DEFAULT_MAX_SHIELD: int = 100
 
 const STATS: Dictionary = {
 	Id.RAILGUN: {
-		"cooldown": 0.95,
+		"cooldown": 1.6,
 		"use_railgun_ray": true,
 		"railgun": {
 			"range": 120.0,
 			"damage": 100,
 			"push_force": 68.0,
 			"damage_source": "railgun",
-			"beam_color": Color(0.72, 0.55, 1.0, 0.95),
-			"beam_emission": Color(0.45, 0.25, 0.95, 1.0),
+			"max_pierce_hits": 8,
+			"pierce_step_offset": 0.05,
+			"beam_color": Color(0.55, 0.88, 1.0, 0.98),
+			"beam_emission": Color(0.4, 0.72, 1.0, 1.0),
 		},
 	},
 	Id.SHOTGUN: {
@@ -97,3 +126,9 @@ static func explosion_damage_at_distance(
 	var distance: float = origin.distance_to(target_position)
 	var falloff: float = 1.0 - clampf(distance / radius, 0.0, 1.0)
 	return int(round(float(max_damage) * falloff))
+
+
+static func wall_explosion_damage_at_distance(
+	max_damage: int, origin: Vector3, target_position: Vector3, radius: float
+) -> int:
+	return explosion_damage_at_distance(max_damage, origin, target_position, radius)

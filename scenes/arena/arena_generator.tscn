@@ -5,9 +5,12 @@
 
 [node name="ArenaGenerator" type="Node3D"]
 script = ExtResource("1_generator")
-debug_show_markers = true
+debug_show_markers = false
+debug_show_spawn_markers = false
 
 [node name="ActiveArena" type="Node3D" parent="."]
+
+[node name="SpawnPads" type="Node3D" parent="."]
 
 [node name="DebugMarkers" type="Node3D" parent="."]
 

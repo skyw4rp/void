@@ -224,6 +224,7 @@ func _run_countdown() -> void:
 	_clear_corpses()
 	_clear_void_effects()
 	_clear_gib_chunks()
+	_clear_railgun_vfx()
 	_clear_round_debris()
 	_spawn_round_debris()
 	death_message_hidden.emit()
@@ -291,6 +292,12 @@ func _clear_gib_chunks() -> void:
 	for node in get_tree().get_nodes_in_group("gib_chunk"):
 		if node is Node:
 			(node as Node).queue_free()
+
+
+func _clear_railgun_vfx() -> void:
+	RailgunImpactFlash.clear_all(get_tree())
+	RailgunImpactHole.clear_all(get_tree())
+	RailgunPierceMark.clear_all(get_tree())
 
 
 func _clear_round_debris() -> void:

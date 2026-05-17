@@ -16,6 +16,7 @@ static func build(parent: Node3D, template: ArenaTemplate) -> void:
 		return
 
 	var cfg: ArenaTemplate.PerimeterConfig = template.perimeter
+	_perimeter_wall_index = 0
 	var rng := RandomNumberGenerator.new()
 	rng.seed = hash(template.arena_name) + template.template_id * 7919
 
@@ -34,6 +35,14 @@ static func build(parent: Node3D, template: ArenaTemplate) -> void:
 		_build_distant_breakwalls(decor_root, cfg, rng)
 
 	print("Perimeter enclosure built for %s (%.0f%% coverage target)" % [template.arena_name, cfg.coverage * 100.0])
+
+
+static var _perimeter_wall_index: int = 0
+
+
+static func _next_perimeter_wall_index() -> String:
+	_perimeter_wall_index += 1
+	return "%03d" % _perimeter_wall_index
 
 
 static func _build_side(
@@ -99,8 +108,7 @@ static func _build_side(
 			continue
 
 		var kind: PieceKind = _pick_kind(rng, is_corner)
-		var destructible: bool = rng.randf() < cfg.destructible_ratio
-		_place_piece(parent, template, local_pos, kind, side_index, rng, destructible)
+		_place_piece(parent, template, local_pos, kind, side_index, rng)
 
 		if is_corner and rng.randf() > 0.5:
 			_place_decor_panel(
@@ -189,8 +197,7 @@ static func _place_piece(
 	local_pos: Vector3,
 	kind: PieceKind,
 	side_index: int,
-	rng: RandomNumberGenerator,
-	destructible: bool
+	rng: RandomNumberGenerator
 ) -> void:
 	var size: Vector3 = _orient_size_for_side(_piece_size(kind, rng), side_index)
 	var center_y: float
@@ -204,12 +211,7 @@ static func _place_piece(
 	var mat: StandardMaterial3D = _pick_material(rng)
 	var rot: Vector3 = _piece_rotation(kind, rng, side_index)
 
-	if destructible:
-		_place_destructible_panel(parent, template.center_position, local_pos, size, mat, rot)
-	else:
-		_add_static_box(
-			parent, template.center_position, local_pos, size, mat, rot, WALL_GROUP, true
-		)
+	_place_destructible_panel(parent, template.center_position, local_pos, size, mat, rot, kind)
 
 
 static func _place_destructible_panel(
@@ -218,46 +220,16 @@ static func _place_destructible_panel(
 	local_pos: Vector3,
 	size: Vector3,
 	mat: StandardMaterial3D,
-	rot: Vector3
-) -> void:
-	var body := ArenaPerimeterPanel.new()
-	body.name = "PerimeterPanel"
-
-	var mesh_inst := MeshInstance3D.new()
-	var box := BoxMesh.new()
-	box.size = size
-	mesh_inst.mesh = box
-	mesh_inst.material_override = mat
-
-	var col := CollisionShape3D.new()
-	var shape := BoxShape3D.new()
-	shape.size = size
-	col.shape = shape
-
-	body.add_child(mesh_inst)
-	body.add_child(col)
-	parent.add_child(body)
-	body.global_position = arena_center + local_pos
-	body.rotation = rot
-	body.setup_panel(mesh_inst)
-
-
-static func _add_static_box(
-	parent: Node3D,
-	arena_center: Vector3,
-	local_pos: Vector3,
-	size: Vector3,
-	mat: StandardMaterial3D,
 	rot: Vector3,
-	group_name: String,
-	add_perimeter_group: bool
+	piece_kind: PieceKind
 ) -> void:
-	var body := StaticBody3D.new()
+	var wall_kind: DestructibleWall.WallKind = DestructibleWall.kind_from_perimeter_piece(piece_kind)
+	if piece_kind == PieceKind.FULL_RUINED:
+		wall_kind = DestructibleWall.WallKind.OUTER_HEAVY
+	var index_suffix: String = _next_perimeter_wall_index()
+	var body := DestructibleWall.new()
 	body.collision_layer = 1
 	body.collision_mask = 1
-	body.add_to_group(group_name)
-	if add_perimeter_group:
-		body.add_to_group(PERIMETER_GROUP)
 
 	var mesh_inst := MeshInstance3D.new()
 	var box := BoxMesh.new()
@@ -275,6 +247,7 @@ static func _add_static_box(
 	parent.add_child(body)
 	body.global_position = arena_center + local_pos
 	body.rotation = rot
+	body.setup_wall(wall_kind, mesh_inst, size, true, index_suffix)
 
 
 static func _place_decor_panel(
