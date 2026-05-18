@@ -1,671 +1,705 @@
 # VOID — Codebase Map
 
-Navigation guide for the **Neon Catacombs / VOID** Godot 4.6 prototype. Use this with [PROTOTYPE.md](PROTOTYPE.md) (implementation detail) and [VOID_PROTOTYPE_AUDIT.md](VOID_PROTOTYPE_AUDIT.md) (gaps and priorities).
+Technical ownership reference for **Neon Catacombs / VOID** (Godot 4.6). Use with [PROTOTYPE.md](PROTOTYPE.md), [TECHNICAL_AUDIT.md](TECHNICAL_AUDIT.md), [VOID_DESIGN_PHILOSOPHY.md](VOID_DESIGN_PHILOSOPHY.md), and `.cursor/rules/void-code-safety.mdc`.
+
+**Entry:** `res://scenes/main.tscn` · **Autoloads:** `VoidAudio`, `CombatVfxDirector` · **Win:** first to **5** rounds (`GameManager.WIN_SCORE`)
 
 ---
 
-## 1. Project overview
+## 1. System ownership table
 
-### Identity
+| System | Owner script(s) | Inputs | Outputs | Dependencies | Notes |
+|--------|-------------------|--------|---------|--------------|-------|
+| **Player** | `scripts/player.gd` | Input actions, `GameManager` state, floor collisions | `velocity`, transform, movement signals, void/death hooks | `GladiatorLocomotion`, `CombatDodge`, `CombatStats`, groups `player` | `CharacterBody3D`; reparents camera at runtime if needed |
+| **Aim** | `scripts/player.gd` (`AimPivot`) | Mouse motion, `LOOK_PITCH_*` clamps | `get_aim_global_transform()`, `get_aim_forward()` | `WeaponManager` reads aim; group `player_aim` | Yaw on body, pitch on `AimPivot` only |
+| **Camera feel** | `scripts/movement/gladiator_camera_feel.gd` | `GladiatorLocomotion.StepResult`, input, dodge state | Roll + offset on `CameraFeelPivot` | Called from `player._physics_process` / `_process` | Does **not** own pitch or FOV |
+| **FOV** | `scripts/movement/gladiator_fov.gd` | Speed, land impact, void fall, weapon pulse | `camera.fov` via `player._process` | `GameBalance.VOID_FALL_FOV_MAX_ADD`, player exports | **Single writer** to `Camera3D.fov` |
+| **Weapons** | `weapon_manager.gd`, `weapon_firing.gd`, `weapon_defs.gd`, `push_hit_resolver.gd` | Aim transform, `GameManager.is_fighting()`, scene root | Projectiles, beams, damage, knockback, audio/VFX hooks | `CombatStats`, `CombatAudio`, `CombatVfxDirector` | Shared player + enemy via `WeaponFiring` |
+| **Enemy AI** | `scripts/enemies/arena_opponent.gd` | Player ref, arena bounds, walls LOS, `CombatStats` | Forces on `RigidBody3D`, fire calls, state | `EnemyWeaponManager`, `EnemyLookAtController`, `ArenaGenerator` | ~1090 lines; not using `GladiatorLocomotion` |
+| **Arena generation** | `arena_generator.gd`, `arena_templates.gd`, `arena_maze_generator.gd`, `arena_wall_set_generator.gd`, `arena_route_validator.gd`, `arena_structure_builder.gd` | Template id, RNG seed | `ActiveArena` geometry, spawns, bounds dict | `GameManager._generate_round_arena` | Maze → cover → validate → build |
+| **Destructible walls** | `destructible_wall.gd`, `wall_destruction.gd` | `damage_cover()` from resolver | HP, fracture, rubble | `WeaponDefs` wall damage; group `destructible_wall` | Railgun does not deal wall HP |
+| **Audio** | `environment/void_audio.gd` (autoload), `audio/combat_audio.gd`, `audio/combat_feedback.gd`, `audio_stream_factory.gd` | 3D positions, weapon/hit events | `AudioStreamPlayer` / `AudioStreamPlayer3D` | `WeaponDefs`, `CombatStats` transitions | No `class_name` on autoload; Master bus only |
+| **VFX** | `effects/combat_vfx_director.gd` (autoload), beam/flash/mark scripts | Hit positions, weapon id, edge tension | Particles, lights, UI flash via `ArenaUI` | `VoidGasController`, `CombatFeedback` | Procedural; group `combat_vfx` |
+| **Shield** | `scripts/combat_stats.gd` | `apply_damage` amount | `shield` int, `shield_broken` signal | `CombatFeedback` on break | Absorbs damage before health |
+| **Health** | `scripts/combat_stats.gd` | Overflow after shield | `health` int, `died` signal | `GameManager.on_health_death` | Death at `health <= 0` |
+| **Death** | `player.gd`, `arena_opponent.gd`, `game_manager.gd`, spawners | `CombatStats.died`, void reports | Corpses/gibs, UI messages, scoring | `GameBalance`, `CorpseSpawner`, `DismembermentSpawner`, `VoidGoreSequence` | Multiple presentation paths by damage type |
+| **UI** | `scripts/arena_ui.gd`, `scripts/ui/crosshair.gd` | `GameManager` signals, `CombatStats`, weapons | Labels, overlays, crosshair draw | Groups `arena_ui`, `crosshair` | Edge overlays created in code |
+| **Round system** | `scripts/game_manager.gd` | Void/health death callbacks | Scores, `RoundState`, countdown signals | `ArenaGenerator`, fighter groups | `_handling_round_end` anti double-score |
+| **Void systems** | `void_gas_controller.gd`, `void_atmosphere.gd`, `void_distant_architecture.gd`, `void_gore_sequence.gd`, `void_death_effect.gd` | Player Y, fall flag, depth_t | Fog, vignette, particles, gore timeline | `VoidAudio`, `GameBalance`, `ArenaUI` | Ring-out Y ≈ -20; death Y -32 |
 
-- **Engine:** Godot 4.6, Forward+, **Jolt Physics**
-- **Mode:** 1v1 arena FPS — ring-out or shield-break + kill
-- **Win condition:** First to **5** round wins (`GameManager.WIN_SCORE`)
-- **Design gate:** [VOID_DESIGN_PHILOSOPHY.md](VOID_DESIGN_PHILOSOPHY.md), enforced in editor via `.cursor/rules/void-design.mdc`
+---
 
-### Main scene
+## 2. Full round flow
 
-| Item | Path |
-|------|------|
-| Entry | `res://scenes/main.tscn` (`project.godot` → `run/main_scene`) |
-| Root | `Main` (`Node3D`) |
-
-**Main scene hierarchy (runtime):**
+### Match bootstrap
 
 ```
-Main
-├── WorldEnvironment, SunLight, RimLightCold, EdgeLightNorth/South
-├── VoidAtmosphere (instance)
-├── VoidGasController
-├── VoidDistantArchitecture (instance)
-├── ArenaGenerator (instance) → ActiveArena, SpawnPads, DebugMarkers, DebrisSpawner
-├── PitVoid (visual)
-├── GameManager
-├── ArenaOpponent (instance)
-├── Player (CharacterBody3D) → [AimPivot → CameraFeelPivot → Camera3D + WeaponManager]
-└── UI (CanvasLayer) → Crosshair, labels, void overlays
+GameManager._ready → _begin_match()
+  → scores = 0, state = COUNTDOWN
+  → score_changed
+  → _run_countdown()  // first round
 ```
 
-Player camera hierarchy is **built at runtime** in `player._setup_aim_camera_hierarchy()` if `AimPivot` is not already in the scene.
-
-### Autoloads
-
-| Name | Script | Role |
-|------|--------|------|
-| `VoidAudio` | `scripts/environment/void_audio.gd` | Void ambience, proximity, combat 3D SFX pool (no `class_name` — avoids name clash) |
-| `CombatVfxDirector` | `scripts/effects/combat_vfx_director.gd` | Procedural combat VFX one-shots, edge screen tension hooks |
-
-### Core gameplay loop
-
-1. **Match start** → `GameManager._begin_match()` → countdown round 1  
-2. **Countdown** → generate arena → clear round entities → spawn debris → respawn fighters → `3, 2, 1, FIGHT!`  
-3. **Fighting** → player input + enemy AI + weapons → damage / knockback / void fall  
-4. **Round end** → score + death/void presentation → countdown next round  
-5. **Match over** at 5 points → `match_over` signal → UI win/lose
-
-### Round lifecycle (`GameManager.RoundState`)
-
-| State | Meaning |
-|-------|---------|
-| `COUNTDOWN` | Arena gen, cleanup, respawn, numeric countdown |
-| `FIGHTING` | Weapons, AI, void checks active |
-| `ROUND_OVER` | Brief window during death/void sequences |
-| `MATCH_OVER` | Match ended |
-
-**Guards:** `_handling_round_end` blocks double scoring; `is_fighting()` gates weapons and damage.
-
----
-
-## 2. System map
-
-### 2.1 Player
-
-| | |
-|---|---|
-| **Purpose** | First-person fighter: Quake-style locomotion, stable aim, knockback, void fall reporting, death presentation |
-| **Main files** | `scripts/player.gd`, `scenes/main.tscn` (Player node) |
-| **Key types** | `CharacterBody3D` + child `CombatStats` |
-| **Group** | `player`, `player_aim` (on AimPivot) |
-
-**Public API (selected):**
-
-| Function | Role |
-|----------|------|
-| `take_damage(...)` | Records hit → `CombatStats.apply_damage` |
-| `get_aim_global_transform()` / `get_aim_forward()` | Stable fire/aim basis |
-| `apply_knockback` / `apply_explosion_knockback` / `apply_rocket_jump_knockback` | Weapon impulse |
-| `arena_respawn(pos)` | Round reset position, void flags |
-| `notify_weapon_fov_pulse()` / `notify_shield_broken()` | Feel hooks |
-| `begin_void_dying()` / `end_void_dying()` | Void sequence cooperation |
-| `begin_void_instability()` | Gore timeline hook |
-
-**Signals:** `movement_dodged`, `movement_landed`, `movement_high_speed`, `movement_heavy_impact`, `movement_air_accel`
-
-**Dependencies:** `GladiatorLocomotion`, `CombatDodge`, `GladiatorCameraFeel`, `GladiatorFov`, `GameManager`, `CombatStats`, `Crosshair`
-
-**Risks / fragile areas:**
-
-- Runtime camera reparenting must stay in sync with `WeaponManager` parent path  
-- `_death_handled` / `_void_reported` must reset on `arena_respawn`  
-- Large monolithic script (~630 lines) mixing locomotion, death, void, camera setup
-
----
-
-### 2.2 Movement
-
-| | |
-|---|---|
-| **Purpose** | Ground/air accel, friction, strafe boost, dodge burst — no animation root motion |
-| **Main files** | `scripts/movement/gladiator_locomotion.gd`, `scripts/movement/combat_dodge.gd` |
-| **Key types** | `GladiatorLocomotion` (`RefCounted`), `CombatDodge` (`RefCounted`) |
-
-**Public API:**
-
-| Class | Functions |
-|-------|-----------|
-| `GladiatorLocomotion` | `step(body, delta, input_dir, config)` → `StepResult` (speed, landed, airborne, …) |
-| `CombatDodge` | `try_dodge(...)`, `is_active()`, `get_velocity_contribution()` |
-
-**Dependencies:** `player.gd` exports (`ground_acceleration`, `friction`, `max_ground_speed`, dodge exports)
-
-**Risks:** Tuning split between `player.gd` exports and `GameBalance`; enemy does **not** use this module (separate RigidBody forces).
-
----
-
-### 2.3 Camera / FOV
-
-| | |
-|---|---|
-| **Purpose** | Mouse yaw on body, pitch on `AimPivot`; roll/offset on `CameraFeelPivot`; combined FOV offsets |
-| **Main files** | `scripts/movement/gladiator_camera_feel.gd`, `scripts/movement/gladiator_fov.gd`, `player.gd` input + `_process` |
-| **Key types** | `GladiatorCameraFeel`, `GladiatorFov` |
-
-**Public API:**
-
-| Class | Functions |
-|-------|-----------|
-| `GladiatorCameraFeel` | `update(...)`, `apply_impulse_shake(feel_pivot, intensity)`, `reset(...)` |
-| `GladiatorFov` | `configure_base`, `set_movement_from_speed`, `add_impact`, `set_void_offset`, `trigger_weapon_pulse`, `apply(camera, delta, void_fall)` |
-
-**Dependencies:** `GameBalance.VOID_FALL_FOV_MAX_ADD`, `VoidGasController` (void fall widens FOV via player void state)
-
-**Risks:** FOV sources stack (`movement`, `impact`, `void`, `weapon`); must clear on `countdown_hidden` to avoid carryover.
-
----
-
-### 2.4 Weapons
-
-| | |
-|---|---|
-| **Purpose** | Shared weapon stats, firing, projectiles, beam, explosions, hit resolution |
-| **Main files** | `scripts/weapons/weapon_defs.gd`, `weapon_firing.gd`, `weapon_manager.gd`, `push_hit_resolver.gd`, `push_projectile.gd`, `bazooka_projectile.gd`, `push_explosion.gd`, `beam_tracer.gd` |
-| **Scenes** | `scenes/weapons/push_projectile.tscn`, `bazooka_projectile.tscn`, `weapon_manager.tscn`, `enemy_weapon_manager.tscn` |
-
-**Key classes:**
-
-| Class | Role |
-|-------|------|
-| `WeaponDefs` | Enum `Id`, stat dictionaries, knockback/ explosion helpers |
-| `WeaponFiring` | `fire(weapon, origin, dir, basis, scene, offset, shooter)` |
-| `WeaponManager` | Player input, cooldown, aim transform |
-| `EnemyWeaponManager` | Enemy fire from muzzle, `get_weapon_forward()` |
-| `PushHitResolver` | All damage/knockback routing (static) |
-
-**Signals:** `WeaponManager.weapon_changed`, `weapon_switched`, `shot_fired`; `EnemyWeaponManager.shot_fired`
-
-**Groups:** `weapon_manager`, `projectile`
-
-**Dependencies:** `CombatAudio`, `CombatVfxDirector`, `PushHitResolver`, `CombatStats`, `GameManager.is_fighting()`
-
-**Risks:**
-
-- `push_hit_resolver.gd` is large (~625 lines) — central choke point for any combat change  
-- Railgun pierce + wall rules spread across `weapon_firing`, `railgun_pierce_mark`, `destructible_wall`  
-- Hit sound cooldown in `VoidAudio` can mask rapid hits
-
----
-
-### 2.5 Enemy AI
-
-| | |
-|---|---|
-| **Purpose** | RigidBody gladiator: hunt, pressure, evade, cover, edge safety, weapon choice, LOS fire |
-| **Main files** | `scripts/enemies/arena_opponent.gd` (~1090 lines), `enemy_weapon_mount.gd`, `enemy_weapon_manager.gd`, `enemy_look_at_controller.gd`, `procedural_enemy_animator.gd` |
-| **Scene** | `scenes/enemies/arena_opponent.tscn` |
-
-**State machine:** `AiState` — `HUNTING`, `PRESSURING`, `EVADING`, `RECOVERING`, `EXECUTING`, `IN_COVER`
-
-**Public API (selected):**
-
-| Function | Role |
-|----------|------|
-| `arena_respawn`, `apply_arena_bounds_from_dict` | Per-round setup |
-| `align_weapon_to_target`, `get_muzzle_global_position`, `get_weapon_forward` | Combat aim |
-| `force_visual_aim_refresh`, `refresh_target_references` | Post-gen sync |
-| `take_damage` | Same pattern as player |
-
-**Dependencies:** `ArenaGenerator` bounds, `arena_wall` group for LOS, `WeaponFiring`, `CombatStats`, `GameManager`
-
-**Risks:**
-
-- **Largest gameplay script** — hard to test in isolation  
-- Aim cache updated every physics frame; early returns in AI can desync aim if not careful  
-- Physics AI ≠ player locomotion feel (intentional but easy to forget when tuning)
-
----
-
-### 2.6 Shield / health / damage
-
-| | |
-|---|---|
-| **Purpose** | Shield-first damage pool, death classification, shield-break event |
-| **Main files** | `scripts/combat_stats.gd`, `scripts/weapons/push_hit_resolver.gd`, `scripts/audio/combat_feedback.gd` |
-| **Key class** | `CombatStats` on each fighter |
-
-**Signals:**
-
-| Signal | When |
-|--------|------|
-| `stats_changed(shield, health)` | After damage or reset |
-| `shield_broken(source)` | Shield transitions **>0 → ≤0** (once per `apply_damage`) |
-| `died(attacker)` | Health reaches 0 |
-
-**Public API (`CombatStats`):**
-
-| Function | Role |
-|----------|------|
-| `apply_damage(amount, attacker)` | Shield then health; triggers break feedback |
-| `record_hit(...)` | Last hit dir, source, world pos for VFX/audio |
-| `reset_combat_stats()` | Round reset |
-| `is_heavy_death()`, `is_dismemberment_death()`, `get_player_death_message()` | Death presentation |
-
-**Shield break pipeline:** `apply_damage` → `shield_broken` + `CombatFeedback.on_shield_broken` → VFX + audio + player/crosshair local feedback.
-
-**Dependencies:** `PushHitResolver.apply_damage_to_target`, `CombatAudio`, `CombatVfxDirector`, `ArenaUI` (label flash on `shield_broken`)
-
-**Risks:** Any damage path bypassing `PushHitResolver`/`take_damage` skips audio/VFX; `died` connected in fighter `_ready` — order matters.
-
----
-
-### 2.7 Arena generation
-
-| | |
-|---|---|
-| **Purpose** | Procedural round arena: continuous deck, indestructible maze, destructible cover, perimeter, spawns |
-| **Main files** | `scripts/arena/arena_generator.gd`, `arena_templates.gd`, `arena_maze_generator.gd`, `arena_wall_set_generator.gd`, `arena_structure_builder.gd`, `arena_route_validator.gd`, `arena_perimeter_builder.gd`, `arena_brutalist_modules.gd`, `arena_fall_zone_builder.gd`, `arena_connector_builder.gd` |
-| **Scene** | `scenes/arena/arena_generator.tscn` |
-
-**Generation order (each attempt):**
-
-1. `ArenaTemplates.get_template(id)`  
-2. `ArenaMazeGenerator.apply` → structural walls + route validation  
-3. `ArenaWallSetGenerator.apply` → destructible cover  
-4. `ArenaRouteValidator` + optional `ArenaConnectorBuilder`  
-5. `ArenaStructureBuilder.build`  
-6. Physics frame → spawn raycasts + route store  
-
-**Public API (`ArenaGenerator`):**
-
-| Function | Role |
-|----------|------|
-| `generate_round_arena_async()` | Main entry (awaitable) |
-| `get_player_spawn_transform` / `get_enemy_spawn_transform` | Round spawns |
-| `get_current_arena_bounds()` | AI danger/safe half extents |
-| `raycast_floor_at`, `has_floor_at`, `is_floor_ahead` | Floor probes (mask bit 1) |
-| `pick_valid_debris_position` | Round debris placement |
-| `is_near_main_route` | Optional debris bias |
-
-**Group:** `arena_generator`
-
-**Dependencies:** `GameManager._generate_round_arena`, `ArenaOpponent.apply_arena_bounds_from_dict`
-
-**Risks:**
-
-- Up to **6** generation attempts; silent fallback to Toxic Bridge  
-- Grid validator ≠ NavMesh (AI uses physics/raycasts separately)  
-- `structural_wall` vs `destructible_wall` must stay in sync in route grid + `PushHitResolver`
-
----
-
-### 2.8 Destructible walls
-
-| | |
-|---|---|
-| **Purpose** | Breakable cover and perimeter; staged fracture; railgun pierce marks (no wall HP from rail) |
-| **Main files** | `scripts/arena/destructible_wall.gd`, `wall_destruction.gd`, `scripts/effects/railgun_pierce_mark.gd`, `scripts/props/debris_chunk.gd` |
-| **Structural (non-destructible)** | `structural_floor.gd`, `structural_wall.gd` |
-
-**Groups:** `destructible_wall`, `arena_wall`, `arena_perimeter`, `structural_geometry`, `structural_wall`
-
-**Public API (`DestructibleWall`):**
-
-| Function | Role |
-|----------|------|
-| `setup_wall(kind, mesh, size, ...)` | HP from `WallKind` |
-| `damage_cover(...)` | Shotgun/bazooka damage entry |
-| `is_destructible_wall()` | Static check |
-
-**Dependencies:** `PushHitResolver`, `WeaponDefs` wall damage constants, `ArenaStructureBuilder`
-
-**Risks:** `PerforableWallGrid` exists but is not wired in builder; anonymous `@StaticBody3D` warnings if generator misnames nodes.
-
----
-
-### 2.9 Void / falling
-
-| | |
-|---|---|
-| **Purpose** | Exterior ring-out only; toxic gas fall; cinematic death; atmosphere |
-| **Main files** | `scripts/environment/void_gas_controller.gd`, `void_atmosphere.gd`, `void_distant_architecture.gd`, `void_gore_sequence.gd`, `void_death_effect.gd`, `scripts/game_balance.gd` |
-| **Player/enemy** | `_report_void_fall()` → `GameManager.report_*_void_fall` |
-
-**Key constants (`GameBalance`):** `VOID_DEATH_Y` (-32), `VOID_FALL_WARNING_Y` (-18), `VOID_DEATH_STYLE`, fog Y bands
-
-**Public API (`VoidGasController`):**
-
-| Function | Role |
-|----------|------|
-| `set_fall_tracking(node, active)` | Start/end fall FX sample target |
-| `notify_fall_started` / `notify_fall_ended` | Static helpers |
-
-**Groups:** `void_gas_controller`, `void_atmosphere`, `void_distant_architecture`, `void_effect`
-
-**Dependencies:** `VoidAudio.update_void_proximity`, `CombatVfxDirector.apply_edge_tension`, `ArenaUI.apply_void_gas_screen`
-
-**Risks:** Fall detection is Y-threshold + arena bounds on fighters; must stay consistent with `ArenaGenerator.get_void_y()`.
-
----
-
-### 2.10 Audio
-
-| | |
-|---|---|
-| **Purpose** | Autoload director: void loops, combat 3D one-shots, procedural fallbacks |
-| **Main files** | `scripts/environment/void_audio.gd`, `scripts/audio/audio_stream_factory.gd`, `scripts/audio/combat_audio.gd`, `scripts/audio/combat_feedback.gd` |
-| **Assets** | `res://audio/void/*`, `res://audio/combat/*` (see [audio/README_REPLACE_ASSETS.md](../audio/README_REPLACE_ASSETS.md)) |
-
-**Public API (`CombatAudio` — thin wrappers):**
-
-| Function | Delegates to |
-|----------|----------------|
-| `play_weapon_fire` | `VoidAudio` |
-| `play_hit_confirm` | `VoidAudio` (skips shield-hit sound on break frame) |
-| `play_wall_hit` | `VoidAudio` |
-| `play_shield_break` | `VoidAudio` |
-
-**Public API (`VoidAudio` static):** `play_weapon_fire`, `play_hit_confirm`, `play_shield_break`, `play_wall_hit`, `update_void_proximity`, void gore one-shots, `compute_edge_proximity`
-
-**Risks:** Single `HIT_SOUND_COOLDOWN_SEC` (45 ms); all buses on `Master` (no mix buses yet).
-
----
-
-### 2.11 VFX
-
-| | |
-|---|---|
-| **Purpose** | Combat one-shots (autoload), void death/gore, railgun pierce visuals |
-| **Main files** | `scripts/effects/combat_vfx_director.gd`, `railgun_impact_flash.gd`, `railgun_pierce_mark.gd`, `beam_tracer.gd`, `void_death_effect.gd`, `void_gore_sequence.gd`, `dismemberment_spawner.gd`, `gib_spawner.gd`, `corpse_spawner.gd` |
-
-**Public API (`CombatVfxDirector` static):**
-
-| Function | Role |
-|----------|------|
-| `spawn_muzzle_fire` | Per-weapon discharge |
-| `spawn_fighter_hit` | Shield/health impacts (not full break) |
-| `play_shield_break_event` | Dedicated break burst |
-| `spawn_wall_hit` | Dust/sparks |
-| `apply_edge_tension` | Arena edge screen (via `ArenaUI`) |
-
-**Dependencies:** `ArenaUI.trigger_combat_view_flash`, `VoidGasController`
-
-**Risks:** Procedural CPUParticles — performance not profiled; `combat_vfx` group cleanup relies on timers not round clear.
-
----
-
-### 2.12 UI / crosshair
-
-| | |
-|---|---|
-| **Purpose** | HUD, countdown, death text, void overlays, crosshair feedback |
-| **Main files** | `scripts/arena_ui.gd`, `scripts/ui/crosshair.gd` |
-| **Scene nodes** | Under `Main/UI` in `main.tscn` |
-
-**GameManager → UI signals:** `score_changed`, `countdown_text_changed`, `countdown_hidden`, `death_message_changed`, `death_message_hidden`, `void_overlay_changed`, `match_over`
-
-**Crosshair API:** `notify_hit_on_target`, `notify_enemy_shield_broken`, `notify_hit_cover`, `configure_aim_stability`
-
-**Group:** `arena_ui`, `crosshair`
-
-**Risks:** `ArenaUI` binds `CombatStats.shield_broken` deferred — duplicate listeners if scene reloaded; edge overlays created in `_ensure_combat_overlays` at runtime.
-
----
-
-### 2.13 Scoring / rounds
-
-| | |
-|---|---|
-| **Purpose** | Match flow, round cleanup, fighter respawn, win at 5 |
-| **Main file** | `scripts/game_manager.gd` |
-| **Group** | `game_manager` |
-
-**Scoring paths:**
-
-| Event | Points |
-|-------|--------|
-| Player void death / player health death | Enemy +1 |
-| Enemy void death / enemy health death | Player +1 |
-
-**Round cleanup:** projectiles, corpses, void effects, gibs, dismember parts, railgun VFX, round debris — then regen arena on next countdown.
-
-**Risks:** Async `generate_round_arena_async` during countdown — timing assumes await completes before `FIGHT!`.
-
----
-
-### 2.14 Docs / rules
-
-| Resource | Purpose |
-|----------|---------|
-| [VOID_DESIGN_PHILOSOPHY.md](VOID_DESIGN_PHILOSOPHY.md) | Canonical feel gate |
-| [VOID_PROTOTYPE_AUDIT.md](VOID_PROTOTYPE_AUDIT.md) | Gaps, P0–P2 |
-| [PROTOTYPE.md](PROTOTYPE.md) | File-level behavior |
-| [art/ART_DIRECTION.md](art/ART_DIRECTION.md), [art/VISUAL_RULES.md](art/VISUAL_RULES.md) | Visual targets |
-| [gameplay/GAMEPLAY.md](gameplay/GAMEPLAY.md) | Loop summary |
-| [tech/ARCHITECTURE.md](tech/ARCHITECTURE.md) | High-level structure |
-| [audio/AUDIO.md](audio/AUDIO.md) | Audio design |
-| `.cursor/rules/void-design.mdc` | Agent/editor guardrails (always apply) |
-
----
-
-## 3. Flow diagrams (text)
-
-### 3.1 Round start
+### Countdown (each round)
 
 ```
-GameManager._ready
-  → _begin_match (scores = 0)
-  → _run_countdown
-       → state = COUNTDOWN
-       → _generate_round_arena
-            → ArenaGenerator.generate_round_arena_async
-                 → pick template → maze → wall set → validate route
-                 → ArenaStructureBuilder.build
-                 → validate spawns / route
-       → _clear_projectiles / corpses / void FX / gibs / rail VFX / debris
-       → _spawn_round_debris
-       → _respawn_fighters (transforms + CombatStats.reset)
-       → emit countdown 3,2,1,FIGHT!
-       → state = FIGHTING
+state = COUNTDOWN
+await ArenaGenerator.generate_round_arena_async()
+  → pick ArenaTemplates id (max 6 attempts)
+  → ArenaMazeGenerator.apply (structural walls)
+  → ArenaWallSetGenerator.apply (destructible cover)
+  → ArenaRouteValidator (≥2 routes, spawn clearance)
+  → ArenaStructureBuilder.build → ActiveArena
+  → spawn raycast validation
+_clear: projectiles, corpses, void_effect, gib_chunk, dismember, railgun VFX, debris
+_spawn_round_debris (DebrisSpawner)
+death_message_hidden, void_overlay off
+_respawn_fighters (transforms + CombatStats.reset)
+UI: "3" → "2" → "1" → "FIGHT!"
+countdown_hidden
+state = FIGHTING
 ```
 
-### 3.2 Player spawn
+### Spawn
+
+| Fighter | Source | Extra |
+|---------|--------|-------|
+| Player | `ArenaGenerator.get_player_spawn_transform()` | `player.arena_respawn()`, capsule offset |
+| Enemy | `ArenaGenerator.get_enemy_spawn_transform()` | `apply_arena_bounds_from_dict`, aim refresh |
+| Pads | `SpawnPads` children | Floor-aligned via raycast |
+
+### Fight (active combat)
+
+- `GameManager.is_fighting() == true`
+- Player: input → locomotion → `WeaponManager.try_fire` (gated)
+- Enemy: `_physics_process` → AI → `_try_shot` → `EnemyWeaponManager.try_fire`
+- Void edge: `VoidGasController` + `CombatVfxDirector.apply_edge_tension` when on deck perimeter
+
+### Combat (hit pipeline)
 
 ```
-_respawn_fighters
-  → player.global_transform = ArenaGenerator.get_player_spawn_transform()
-  → player.arena_respawn(spawn_pos)  // velocity, void flags, death state
-  → CombatStats.reset_combat_stats()
-  → enemy: same + apply_arena_bounds_from_dict + aim refresh
-Spawn pads placed after floor raycast (_place_spawn_pads)
-```
-
-### 3.3 Enemy spawn
-
-Same as player branch in `_respawn_fighters`; opponent is `RigidBody3D` with locked axes until death. AI `_player` reference refreshed via `refresh_target_references()`.
-
-### 3.4 Player fire
-
-```
-Input shoot + WeaponManager.try_fire
-  → GameManager.is_fighting?
-  → WeaponFiring.fire(weapon, camera origin, aim dir, basis, scene, shooter)
-       → railgun: ray loop + BeamTracer + PushHitResolver hits
-       → shotgun: N × push_projectile
-       → bazooka: bazooka_projectile
-  → CombatAudio.play_weapon_fire
-  → CombatVfxDirector.spawn_muzzle_fire
-  → player.notify_weapon_fov_pulse
-  → shot_fired signal → crosshair pulse
-```
-
-### 3.5 Enemy fire
-
-```
-ArenaOpponent._try_shot (timers + LOS + state)
-  → align_weapon_to_target
-  → EnemyWeaponManager.try_fire(muzzle pos, dir, basis)
-       → WeaponFiring.fire(..., shooter = arena_opponent)
-  → CombatAudio + CombatVfxDirector (enemy scale)
-```
-
-### 3.6 Shield damage
-
-```
-Projectile/beam/explosion → PushHitResolver.apply_*_hit
-  → apply_damage_to_target
-       → stats.record_hit(...)
-       → shield_before / health_before captured
-       → stats.apply_damage
-       → CombatAudio.play_hit_confirm (shield tick sound if shield ↓, not break)
-       → CombatVfxDirector.spawn_fighter_hit (small shield ring if shield ↓ only)
+WeaponFiring / projectile collision
+  → PushHitResolver.apply_*_hit
+  → apply_damage_to_target OR knockback-only
+       → CombatStats.record_hit
+       → CombatStats.apply_damage
+       → CombatAudio.play_hit_confirm
+       → CombatVfxDirector.spawn_fighter_hit
        → Crosshair.notify_player_damage_to (if player hit enemy)
 ```
 
-### 3.7 Shield break
+**Note:** `apply_damage_to_target` does not currently call `is_fighting()` (see P0 in §5).
+
+### Shield damage
 
 ```
-CombatStats.apply_damage (shield_before > 0, shield <= 0)
-  → shield_broken.emit(source)
+apply_damage with shield > 0
+  → shield reduced (health unchanged if fully absorbed)
+  → stats_changed
+  → hit_confirm shield sound (unless break frame)
+  → small shield hit VFX (not on same frame as break)
+```
+
+### Shield break (once per transition)
+
+```
+shield_before > 0 AND shield_after <= 0
+  → CombatStats.shield_broken.emit(source)
   → CombatFeedback.on_shield_broken
-       → CombatVfxDirector.play_shield_break_event (rings + burst)
-       → CombatAudio.play_shield_break (hit_confirm skipped same frame)
-       → if player: player.notify_shield_broken (FOV + camera shake)
-       → if enemy + player caused: crosshair.notify_enemy_shield_broken
-  → ArenaUI._on_*_shield_broken (stats label flash only)
+       → CombatVfxDirector.play_shield_break_event
+       → CombatAudio.play_shield_break (hit_confirm skipped)
+       → player.notify_shield_broken (if player)
+       → crosshair.notify_enemy_shield_broken (if player broke enemy)
+  → ArenaUI stats label flash (shield_broken signal)
 ```
 
-### 3.8 Health damage
+### Death
+
+**Health zero:**
 
 ```
-apply_damage with shield == 0
-  → health reduced
-  → hit_confirm health sound + hurt layer
-  → spawn_fighter_hit (red burst)
-  → if health == 0: died.emit → fighter _on_combat_died
-```
-
-### 3.9 Death / scoring
-
-```
-CombatStats.died
-  → Player or ArenaOpponent._on_combat_died
-       → corpse / gib / dismember spawn
-       → hide live meshes
+CombatStats.apply_damage → health <= 0
+  → died.emit(attacker)
+  → fighter._on_combat_died
+       → corpse / dismember / hide meshes
        → GameManager.on_health_death(player_died, ...)
-            → death message + wait (view_sec by death type)
-            → increment score
-            → _finish_round_after_score
-                 → win? → MATCH_OVER
-                 → else → _run_countdown (new arena…)
+       → wait KILL_DEATH_VIEW_SEC / dismember timing
+       → score += 1
+       → _finish_round_after_score
 ```
 
-**Void fall path:**
+**Void ring-out:**
 
 ```
-Fighter Y < void threshold (fighting)
+fighter Y < threshold while fighting
   → _report_void_fall (once)
   → GameManager._run_*_void_death_sequence
-       → void overlay + begin_void_dying
-       → VoidGoreSequence or VoidDeathEffect
+       → void overlay, begin_void_dying, VoidGoreSequence or VoidDeathEffect
        → finish_*_void_death → score → _finish_round_after_score
 ```
 
-### 3.10 Arena generation
-
-See §2.7 and `ArenaGenerator.generate_round_arena_async` (up to 6 attempts, fallback template).
-
-### 3.11 Void fall (atmospheric)
+### Score
 
 ```
-VoidGasController._process
-  → sample Y → depth_t, edge_t
-  → if on deck: edge fog + CombatVfxDirector.apply_edge_tension
-  → if falling: fog/DOF/void atmosphere + VoidAudio proximity
-Player below VOID_FALL_WARNING_Y while fighting → instability + FOV widen
-Below VOID_DEATH_Y → ring-out score path (not health death)
+_finish_round_after_score
+  → score_changed
+  → if score >= 5: MATCH_OVER, match_over
+  → else: state = ROUND_OVER → await _run_countdown() again
+  → _handling_round_end = false
 ```
+
+### Reset (between rounds)
+
+- Geometry: full regen (not incremental)
+- Stats: `reset_combat_stats()` on both fighters
+- World entities: group-based `queue_free` (see `GameManager._clear_*`)
 
 ---
 
-## 4. Architecture risks
+## 3. File map (major scripts)
 
-### Duplicated logic
+Legend: **Writes** = authoritative mutations. **Reads** = primary consumers.
 
-| Area | Issue |
+### Core / round
+
+#### `scripts/game_manager.gd`
+
+| | |
+|--|--|
+| **Purpose** | Match flow, scoring, countdown orchestration, round cleanup |
+| **Public API** | `is_fighting()`, `is_round_active()`, `get_*_spawn()`, `report_*_void_fall`, `finish_*_void_death`, `on_health_death`, `get_arena_generator()` |
+| **Signals** | `score_changed`, `match_over`, `countdown_*`, `death_message_*`, `void_overlay_changed` |
+| **Writes** | `player_score`, `enemy_score`, `state`, `_handling_round_end` |
+| **Reads** | Groups `arena_generator`, `player`, `arena_opponent`, `debris_spawner` |
+| **Risks** | Async arena gen during countdown; void finish scoring depends on flags |
+
+#### `scripts/game_balance.gd`
+
+| | |
+|--|--|
+| **Purpose** | Central tuning constants (void, death timing, gib, fog Y) |
+| **Public API** | `class_name GameBalance` — const accessors, `void_fog_*`, `uses_void_gore_cinematic()` |
+| **Signals** | None |
+| **Writes** | None (const) |
+| **Reads** | Most death/void/fog systems |
+| **Risks** | Not all balance lives here (weapon stats in `WeaponDefs`, player exports) |
+
+#### `scripts/combat_stats.gd`
+
+| | |
+|--|--|
+| **Purpose** | Shield/health pool, hit memory, death classification |
+| **Public API** | `apply_damage`, `record_hit`, `reset_combat_stats`, `is_dead`, `is_heavy_death`, `is_dismemberment_death` |
+| **Signals** | `stats_changed`, `shield_broken`, `died` |
+| **Writes** | `shield`, `health`, `last_*` hit fields |
+| **Reads** | `PushHitResolver`, UI, `CombatFeedback` |
+| **Risks** | No `is_fighting` guard inside `apply_damage`; prints every change |
+
+### Player / movement
+
+#### `scripts/player.gd`
+
+| | |
+|--|--|
+| **Purpose** | Input, locomotion step, camera hierarchy, knockback, void fall, death handoff |
+| **Public API** | `get_aim_global_transform`, `arena_respawn`, `take_damage`, `notify_shield_broken`, void/damage hooks |
+| **Signals** | `movement_*` (dodged, landed, high_speed, …) |
+| **Writes** | `velocity`, `transform`, aim pivot rotation, collision layers when dead |
+| **Reads** | `GameManager`, `CombatStats`, `GladiatorFov`, `GladiatorCameraFeel` |
+| **Risks** | Runtime camera reparent; monolithic file |
+
+#### `scripts/movement/gladiator_locomotion.gd`
+
+| | |
+|--|--|
+| **Purpose** | Quake-style accel/friction step |
+| **Public API** | `static step(body, delta, input, basis, gravity, config, dodge_boost) → StepResult` |
+| **Signals** | None |
+| **Writes** | `CharacterBody3D.velocity` (via caller) |
+| **Reads** | Player export dictionary |
+| **Risks** | Enemy does not use |
+
+#### `scripts/movement/combat_dodge.gd`
+
+| | |
+|--|--|
+| **Purpose** | Dodge burst + double-tap detection |
+| **Public API** | `try_player_dodge`, `tick`, `get_active_velocity_boost`, `register_move_input` |
+| **Signals** | None |
+| **Writes** | Internal timers |
+| **Reads** | Player input (`sprint` action = dodge) |
+| **Risks** | Input named `sprint` but not sprint speed |
+
+#### `scripts/movement/gladiator_camera_feel.gd`
+
+| | |
+|--|--|
+| **Purpose** | Roll and positional kick on feel pivot |
+| **Public API** | `update`, `apply_impulse_shake`, `reset` |
+| **Signals** | None |
+| **Writes** | `CameraFeelPivot` rotation/position |
+| **Reads** | Locomotion step, dodge state |
+| **Risks** | Must not write pitch |
+
+#### `scripts/movement/gladiator_fov.gd`
+
+| | |
+|--|--|
+| **Purpose** | Combined FOV offsets with smooth apply |
+| **Public API** | `configure_base`, `set_movement_from_speed`, `add_impact`, `set_void_offset`, `trigger_weapon_pulse`, `apply` |
+| **Signals** | None |
+| **Writes** | `camera.fov` (through `apply`) |
+| **Reads** | Player `_process`, void fall state |
+| **Risks** | Multiple offset sources; must clear on countdown |
+
+### Weapons
+
+#### `scripts/weapons/weapon_defs.gd`
+
+| | |
+|--|--|
+| **Purpose** | Weapon enum, stat dictionaries, knockback helpers |
+| **Public API** | `class_name WeaponDefs` — `get_data`, damage helpers, wall damage constants |
+| **Signals** | None |
+| **Writes** | None |
+| **Reads** | `WeaponFiring`, UI, audio factory |
+| **Risks** | Balance scattered vs `GameBalance` |
+
+#### `scripts/weapons/weapon_firing.gd`
+
+| | |
+|--|--|
+| **Purpose** | Spawn projectiles / railgun ray pierce loop |
+| **Public API** | `static fire(...) → cooldown` |
+| **Signals** | None |
+| **Writes** | Scene tree (projectiles, beam tracers) |
+| **Reads** | `WeaponDefs`, `PushHitResolver`, physics space |
+| **Risks** | Complex rail loop; pierce vs wall rules |
+
+#### `scripts/weapons/weapon_manager.gd`
+
+| | |
+|--|--|
+| **Purpose** | Player weapon switch + fire input |
+| **Public API** | `try_fire`, `switch_weapon`, `get_weapon_name`, `can_fire` |
+| **Signals** | `weapon_changed`, `weapon_switched`, `shot_fired` |
+| **Writes** | `_cooldown_remaining`, view visibility |
+| **Reads** | `get_aim_global_transform`, `GameManager`, autoloads |
+| **Risks** | Fire origin = camera position, not muzzle |
+
+#### `scripts/weapons/push_hit_resolver.gd`
+
+| | |
+|--|--|
+| **Purpose** | All combat hits: damage, knockback, walls, explosions |
+| **Public API** | `apply_damage_to_target`, `apply_projectile_hit`, `apply_railgun_hit`, `apply_explosion_hit`, `resolve_hit_body`, static helpers |
+| **Signals** | None |
+| **Writes** | `CombatStats` shield/health; rigidbody velocity; wall HP via `damage_cover` |
+| **Reads** | `WeaponDefs`, `GameManager` (indirect), groups |
+| **Risks** | God file; **P0** no fight-phase guard; triggers audio/VFX |
+
+#### `scripts/weapons/push_projectile.gd` / `bazooka_projectile.gd`
+
+| | |
+|--|--|
+| **Purpose** | Moving hitboxes; bazooka explodes via `PushExplosion` |
+| **Public API** | `launch`, `configure` |
+| **Signals** | None (group `projectile`) |
+| **Writes** | Self position; despawn |
+| **Reads** | `PushHitResolver` |
+| **Risks** | Cleared each countdown |
+
+### Enemy
+
+#### `scripts/enemies/arena_opponent.gd`
+
+| | |
+|--|--|
+| **Purpose** | Full AI + physics + combat + void + death |
+| **Public API** | `take_damage`, `arena_respawn`, `apply_arena_bounds_from_dict`, aim helpers, void hooks |
+| **Signals** | None (uses `CombatStats` signals) |
+| **Writes** | `linear_velocity`, AI state, weapon choice timers |
+| **Reads** | Player, `ArenaGenerator`, `arena_wall` group, `CombatStats` |
+| **Risks** | Size; debug flags; LOS mask = layer 1 |
+
+#### `scripts/enemies/enemy_weapon_manager.gd`
+
+| | |
+|--|--|
+| **Purpose** | Enemy weapon visuals + fire from muzzle |
+| **Public API** | `try_fire`, `get_muzzle_global_position`, `get_weapon_forward`, `switch_weapon` |
+| **Signals** | `shot_fired` |
+| **Writes** | Cooldown, view visibility |
+| **Reads** | `WeaponFiring`, mount forward |
+| **Risks** | Duplicates post-fire audio/VFX pattern with player |
+
+#### `scripts/enemies/enemy_weapon_mount.gd`
+
+| | |
+|--|--|
+| **Purpose** | Weapon mount aim alignment |
+| **Public API** | `align_to_target`, `get_weapon_forward`, `notify_weapon_synced` |
+| **Signals** | None |
+| **Writes** | Mount transform |
+| **Reads** | Arena opponent aim cache |
+| **Risks** | `-basis.z` = forward convention |
+
+#### `scripts/animation/enemy_look_at_controller.gd`
+
+| | |
+|--|--|
+| **Purpose** | Head/torso/arms look-at; muzzle aim |
+| **Signals** | None |
+| **Writes** | Bone/mount rotations |
+| **Reads** | Aim world positions from opponent |
+| **Risks** | Must stay synced with fire direction |
+
+### Arena
+
+#### `scripts/arena/arena_generator.gd`
+
+| | |
+|--|--|
+| **Purpose** | Round arena build + spawn validation + debug viz |
+| **Public API** | `generate_round_arena_async`, spawn transforms, `raycast_floor_at`, `get_current_arena_bounds`, `is_near_main_route` |
+| **Signals** | None |
+| **Writes** | `ActiveArena` children, spawn positions, `_route_path_world` |
+| **Reads** | Template + maze + wall generators |
+| **Risks** | 6-attempt loop; console prints |
+
+#### `scripts/arena/arena_templates.gd`
+
+| | |
+|--|--|
+| **Purpose** | Five deck templates + signature cover pieces |
+| **Public API** | `get_template(id)`, `get_playable_ids()` |
+| **Writes** | New `ArenaTemplate` instances (data only) |
+| **Reads** | `ArenaGenerator` |
+| **Risks** | Template `wall_pieces` partially kept by wall gen |
+
+#### `scripts/arena/arena_maze_generator.gd`
+
+| | |
+|--|--|
+| **Purpose** | Indestructible structural maze layouts |
+| **Public API** | `static apply(template, template_id) → Dictionary` |
+| **Writes** | `template.structural_wall_pieces` |
+| **Reads** | `ArenaRouteValidator._*` (private API) |
+| **Risks** | Coupling to validator internals |
+
+#### `scripts/arena/arena_wall_set_generator.gd`
+
+| | |
+|--|--|
+| **Purpose** | Procedural destructible cover |
+| **Public API** | `static apply(template, template_id) → Dictionary` |
+| **Writes** | `template.wall_pieces` |
+| **Reads** | `ArenaRouteValidator` |
+| **Risks** | Rollback placement on route fail |
+
+#### `scripts/arena/arena_route_validator.gd`
+
+| | |
+|--|--|
+| **Purpose** | Grid BFS routes spawn-to-spawn, detour count |
+| **Public API** | `validate_template`, `path_to_world_points`, `GridData` |
+| **Writes** | None (pure) |
+| **Reads** | `ArenaTemplate` floor + walls |
+| **Risks** | Not NavMesh; used externally via `_` methods |
+
+#### `scripts/arena/arena_structure_builder.gd`
+
+| | |
+|--|--|
+| **Purpose** | Instantiate floors, structural walls, destructible walls |
+| **Public API** | `static build(parent, template)` |
+| **Writes** | Scene tree under `ActiveArena` |
+| **Reads** | `ArenaTemplate`, materials |
+| **Risks** | Order: floor → structural → destructible → modules → perimeter |
+
+#### `scripts/arena/destructible_wall.gd`
+
+| | |
+|--|--|
+| **Purpose** | HP walls + fracture pipeline |
+| **Public API** | `damage_cover`, `setup_wall`, `infer_kind_from_size` |
+| **Signals** | None |
+| **Writes** | HP, collision layers when broken |
+| **Reads** | `WeaponDefs` via resolver |
+| **Risks** | Group `destructible_wall` required for AI LOS |
+
+#### `scripts/arena/structural_wall.gd`
+
+| | |
+|--|--|
+| **Purpose** | Permanent maze collision |
+| **Public API** | `setup_structural_wall` |
+| **Writes** | None after build |
+| **Reads** | `PushHitResolver.is_structural_geometry` path |
+| **Risks** | Same layer 1 as destructible |
+
+### Audio / VFX
+
+#### `scripts/environment/void_audio.gd`
+
+| | |
+|--|--|
+| **Purpose** | Autoload audio director |
+| **Public API** | Static: `play_weapon_fire`, `play_hit_confirm`, `play_shield_break`, `play_wall_hit`, void gore API, `update_void_proximity`, `compute_edge_proximity` |
+| **Signals** | None |
+| **Writes** | Player volumes, pool index |
+| **Reads** | `AudioStreamFactory` |
+| **Risks** | 45ms hit cooldown; no buses |
+
+#### `scripts/audio/combat_feedback.gd`
+
+| | |
+|--|--|
+| **Purpose** | Single entry for shield-break A/V |
+| **Public API** | `static on_shield_broken(stats)` |
+| **Writes** | None (delegates) |
+| **Reads** | `CombatStats`, autoloads, crosshair |
+| **Risks** | Must remain only break entry point |
+
+#### `scripts/effects/combat_vfx_director.gd`
+
+| | |
+|--|--|
+| **Purpose** | Autoload combat particles/lights/screen hooks |
+| **Public API** | `spawn_muzzle_fire`, `spawn_fighter_hit`, `play_shield_break_event`, `spawn_wall_hit`, `apply_edge_tension` |
+| **Writes** | Temporary nodes in scene |
+| **Reads** | `arena_ui` group for overlays |
+| **Risks** | Not cleared on round start; null if autoload disabled |
+
+#### `scripts/environment/void_gas_controller.gd`
+
+| | |
+|--|--|
+| **Purpose** | Fog, screen tint, fall DOF, edge pulse |
+| **Public API** | `set_fall_tracking`, static `notify_fall_started/ended` |
+| **Writes** | `WorldEnvironment` fog/adjustment (when active) |
+| **Reads** | `GameBalance`, player Y, `VoidAudio` |
+| **Risks** | Mutates environment resource at runtime |
+
+### UI
+
+#### `scripts/arena_ui.gd`
+
+| | |
+|--|--|
+| **Purpose** | HUD labels, void overlays, edge tension rects |
+| **Public API** | `apply_void_gas_screen`, `apply_edge_tension`, `trigger_combat_view_flash` |
+| **Signals** | Listens to `GameManager`, `CombatStats` |
+| **Writes** | Label text, ColorRect visibility/colors |
+| **Reads** | `GameManager`, weapon manager group |
+| **Risks** | `shield_broken` connects without disconnect guard |
+
+#### `scripts/ui/crosshair.gd`
+
+| | |
+|--|--|
+| **Purpose** | Crosshair draw + hit feedback |
+| **Public API** | `notify_hit_on_target`, `notify_enemy_shield_broken`, static `get_instance` |
+| **Signals** | `shot_fired` |
+| **Writes** | Internal flash state → `_draw` |
+| **Reads** | `WeaponManager` signals |
+| **Risks** | Static group lookup |
+
+### Secondary / legacy (know but avoid)
+
+| File | Note |
+|------|------|
+| `scripts/push_enemy.gd` | Legacy prototype; not in `main.tscn` |
+| `scripts/environment/arena_zone.gd`, `scenes/arenas/*` | Hand-authored arenas; not round flow |
+| `scripts/arena/perforable_wall_grid.gd` | Not wired in builder |
+| `scripts/arena/arena_floor_builder.gd` | Superseded by `arena_structure_builder` |
+
+---
+
+## 4. State ownership
+
+### Single-writer rules
+
+| State | Sole writer | Readers |
+|-------|-------------|---------|
+| `player_score` / `enemy_score` | `GameManager` | `ArenaUI` via signal |
+| `GameManager.state` | `GameManager` | Weapons (query), AI (query) |
+| `CombatStats.shield` / `health` | `CombatStats.apply_damage`, `reset_combat_stats` | UI, AI (`_is_low_combat`) |
+| `Camera3D.fov` | `GladiatorFov.apply` (from `player`) | None else |
+| `AimPivot.rotation.x` (pitch) | `player` input handler | `get_aim_global_transform` |
+| `CameraFeelPivot` transform | `GladiatorCameraFeel` | None |
+| Arena geometry | `ArenaStructureBuilder` / generators | Physics, AI, raycasts |
+| Active arena template data | Generators write `ArenaTemplate` fields once per attempt | `ArenaStructureBuilder` |
+
+### Forbidden duplicate ownership (do not add second writers)
+
+- Shield break feedback: **only** `CombatFeedback.on_shield_broken` (not also in resolver hit VFX on break frame).
+- Round score: **only** `GameManager` finish paths.
+- Final FOV: **only** `GladiatorFov` — do not set `camera.fov` elsewhere.
+- Structural vs destructible: **never** call `damage_cover` on `StructuralWall`.
+
+### Coordinated systems (multiple readers, one orchestrator)
+
+| Orchestrator | Coordinators |
+|--------------|--------------|
+| `PushHitResolver.apply_damage_to_target` | `CombatStats`, `CombatAudio`, `CombatVfxDirector`, `Crosshair` |
+| `CombatFeedback.on_shield_broken` | `CombatVfxDirector`, `VoidAudio`, `player`, `Crosshair`, `ArenaUI` (label only) |
+| `GameManager._run_countdown` | `ArenaGenerator`, cleanup groups, `DebrisSpawner`, fighters |
+| `VoidGasController._process` | `VoidAudio`, `ArenaUI`, `CombatVfxDirector`, environment |
+
+---
+
+## 5. Technical risks
+
+Consolidated from [TECHNICAL_AUDIT.md](TECHNICAL_AUDIT.md). IDs reference audit entries.
+
+### P0
+
+| ID | Problem | Files |
+|----|---------|-------|
+| **T-001** | `PushHitResolver` applies damage without `GameManager.is_fighting()` guard | `push_hit_resolver.gd`, `combat_stats.gd` |
+
+### P1
+
+| ID | Problem | Files |
+|----|---------|-------|
+| T-002 | `arena_opponent.gd` god object | `arena_opponent.gd` |
+| T-003 | `push_hit_resolver.gd` god module | `push_hit_resolver.gd` |
+| T-004 | `player.gd` monolith | `player.gd` |
+| T-005 | Group / `has_method` coupling | Many |
+| T-006 | Validator private API used externally | `arena_route_validator.gd`, maze/wall gen |
+| T-007 | Arena gen failure only logged | `arena_generator.gd` |
+| T-008 | `CombatStats` no round-state gate | `combat_stats.gd` |
+| T-009 | Dual damage paths (`take_damage` vs resolver) | `combat_stats.gd`, `push_hit_resolver.gd` |
+| T-010 | Runtime camera hierarchy mutation | `player.gd`, `main.tscn` |
+| T-011 | Unused perforable wall grid | `perforable_wall_grid.gd` |
+| T-012 | Legacy arena scenes | `scenes/arenas/*` |
+| T-013 | Orphan `push_enemy.gd` | `push_enemy.gd` |
+
+### P2
+
+| ID | Problem | Files |
+|----|---------|-------|
+| T-014 | Input `sprint` = dodge only | `project.godot`, `player.gd` |
+| T-015 | No audio buses | `project.godot`, `void_audio.gd` |
+| T-016 | Global 45ms hit sound cooldown | `void_audio.gd` |
+| T-017 | Combat VFX not cleared on round | `combat_vfx_director.gd`, `game_manager.gd` |
+| T-018 | VFX/audio perf not profiled | autoloads |
+| T-019 | Verbose `print()` in hot paths | multiple |
+| T-020 | UI signal double-connect on reload | `arena_ui.gd` |
+| T-021 | Player fire from camera not muzzle | `weapon_manager.gd` |
+| T-022 | Collision layers undocumented in project | `project.godot` |
+| T-023 | Autoload without `class_name` | `void_audio.gd` |
+| T-024 | Async countdown from `_ready` | `game_manager.gd` |
+| T-025 | Tuning split across files | many |
+| T-026 | `ARCHITECTURE.md` drift | docs |
+| T-027 | AI LOS uses blanket layer 1 | `arena_opponent.gd` |
+
+---
+
+## 6. Debug commands / tools
+
+All toggles are **editor exports** on nodes in `main.tscn` unless noted. Run game (F5), enable flag, observe scene.
+
+### Arena
+
+| Goal | How |
+|------|-----|
+| **Route grid** | Select `ArenaGenerator` → `debug_show_route = true` → green = primary path, blue = walkable, red = blocked |
+| **Spawn points** | `debug_show_spawn_markers = true` → green sphere = player, red = enemy |
+| **Danger bounds** | `debug_show_markers = true` → blue corner spheres |
+| **Console** | Watch generation logs: maze name, route count, wall set, attempt failures |
+| **Regen stress** | Play multiple rounds; confirm no `push_error` on arena fail |
+
+### Routes / navigation data
+
+| Goal | How |
+|------|-----|
+| **Stored path** | `ArenaGenerator.get_route_path_points()` after gen (script debugger or temporary print) |
+| **Near route** | `is_near_main_route(world_pos)` used by debris spawner — enable debris debug via placement failures in log |
+
+### Audio
+
+| Goal | How |
+|------|-----|
+| **Mix levels** | Inspector → autoload `VoidAudio` root: `master_volume_db`, `combat_volume_db`, `enemy_combat_volume_db`, `void_ambience_volume_db` |
+| **Missing assets** | Drop OGG in `res://audio/combat/` / `res://audio/void/` — factory auto-loads (see `audio/README_REPLACE_ASSETS.md`) |
+| **Shield break** | Break enemy shield — distinct rupture vs shield tick |
+| **Hit throttle** | Rapid shotgun/rail pierce — listen for dropped ticks (`HIT_SOUND_COOLDOWN_SEC`) |
+
+### AI
+
+| Goal | How |
+|------|-----|
+| **Movement** | `ArenaOpponent` → `debug_ai_movement = true` → console state/force logs |
+| **Fire blocks** | `debug_ai_fire = true` → prints `_fire_block_reason` when shot denied |
+| **Aim rays** | `EnemyLookAtController` → `debug_show_aim_ray`, `debug_show_enemy_forward` |
+| **Weapon forward** | `EnemyWeaponMount` → `debug_show_weapon_forward`, `debug_show_muzzle` |
+| **Anim state** | `ProceduralEnemyAnimator` → `debug_show_anim_state` → Label3D over enemy |
+
+### FOV
+
+| Goal | How |
+|------|-----|
+| **Live tuning** | Select `Player` → `base_fov`, `speed_fov_boost`, `weapon_fov_pulse`, `shield_break_fov_pulse` |
+| **Void widen** | Fall off arena edge — FOV should rise via `GladiatorFov.set_void_offset` |
+| **Reset check** | After countdown, FOV should return to base (listen `countdown_hidden` → `_on_round_countdown_hidden`) |
+
+### Combat / stats
+
+| Goal | How |
+|------|-----|
+| **Shield/health** | `CombatStats.debug_name` — prints on each `apply_damage` |
+| **Resolver** | `PushHitResolver` prints impulse lines (noisy) — filter console |
+| **Shield break once** | Break shield — one burst + `shield_broken` (watch duplicate VFX/audio) |
+| **Fight gate** | Try firing during countdown (should not); note P0 if damage applies |
+
+### Spawns
+
+| Goal | How |
+|------|-----|
+| **Markers** | `ArenaGenerator.debug_show_spawn_markers` |
+| **Floor snap** | `SpawnPads` visible after countdown; console `Spawn validation passed` |
+| **Ray failure** | If spawn invalid, generator retries — read `Spawn or route invalid, regenerating` |
+
+### VFX
+
+| Goal | How |
+|------|-----|
+| **Autoload tuning** | `CombatVfxDirector`: `vfx_intensity`, `shield_break_scale`, `void_edge_strength`, flash alphas |
+| **Edge tension** | Walk to arena perimeter — vignette via `ArenaUI.apply_edge_tension` |
+| **Muzzle/hit** | Fire weapons / take hits — watch `combat_vfx` group in remote scene tree |
+| **Round carryover** | Start new round — check for leftover VFX nodes (known P2) |
+
+### Godot editor / project
+
+| Goal | How |
+|------|-----|
+| **Groups** | Remote tree: filter `player`, `game_manager`, `arena_generator`, `projectile` |
+| **Physics layers** | Project → Layer names (currently unnamed); code uses layer **1** gameplay, **8** corpses/gibs |
+| **Headless** | `godot --headless --path . --quit-after 3` (CI smoke; Godot on PATH) |
+
+---
+
+## Quick reference
+
+### Autoloads
+
+| Name | Script |
 |------|--------|
-| Damage entry | `take_damage` on fighters vs `PushHitResolver.apply_damage_to_target` — must stay aligned |
-| Shield break | Was historically split across UI, hit VFX, crosshair; now centralized in `CombatFeedback` (keep it that way) |
-| Floor probes | `ArenaGenerator` raycasts vs enemy `is_floor_ahead` / `is_over_gap` |
-| Weapon fire | Player `WeaponManager` vs `EnemyWeaponManager` duplicate post-fire audio/VFX calls |
+| `VoidAudio` | `scripts/environment/void_audio.gd` |
+| `CombatVfxDirector` | `scripts/effects/combat_vfx_director.gd` |
 
-### Unclear ownership
+### Groups (round cleanup)
 
-| Question | Where it lives today |
-|----------|---------------------|
-| Who scores? | `GameManager` only |
-| Who validates arena? | `ArenaGenerator` + `ArenaRouteValidator` |
-| Who plays combat SFX? | `VoidAudio` autoload via `CombatAudio` |
-| Who spawns break VFX? | `CombatVfxDirector` via `CombatFeedback` |
-| Round state? | `GameManager.state` — weapons/AI query `is_fighting()` |
+`projectile`, `corpse`, `void_effect`, `void_fragment`, `gore_chunk`, `gib_chunk`, `dismembered_body_part`, `combat_vfx` (timer free only)
 
-### Tight coupling
+### Related docs
 
-- `PushHitResolver` → `CombatStats`, `CombatAudio`, `CombatVfxDirector`, `Crosshair` (static calls)  
-- `GameManager` → concrete groups (`player`, `arena_opponent`, `arena_generator`)  
-- `ArenaOpponent` → `ArenaGenerator` bounds dict shape (string keys)  
-- `VoidGasController` → `ArenaUI`, `VoidAudio`, `CombatVfxDirector` by group/method name  
-
-### Hidden dependencies
-
-- Group lookups (`get_first_node_in_group`) — no compile-time checks  
-- `has_method` / `call()` for `GameManager`, `damage_cover`, arena respawn hooks  
-- `WeaponFiring` expects `scene_root.get_world_3d()` for rails  
-- Player camera hierarchy mutation at runtime  
-
-### Large files (candidates to split)
-
-| File | ~Lines | Note |
-|------|--------|------|
-| `scripts/enemies/arena_opponent.gd` | 1090 | AI + void + death + combat |
-| `scripts/weapons/push_hit_resolver.gd` | 625 | All hit types |
-| `scripts/player.gd` | 635 | Locomotion + camera + death + void |
-| `scripts/arena/arena_wall_set_generator.gd` | 360 | Cover placement |
-| `scripts/effects/combat_vfx_director.gd` | 450 | All combat VFX |
-| `scripts/environment/void_audio.gd` | 380 | Void + combat audio |
-
-### Systems needing tests / debug tools
-
-| System | Existing debug | Gap |
-|--------|----------------|-----|
-| Arena route | `ArenaGenerator.debug_show_route` | No automated test scenes |
-| AI | `debug_ai_movement`, `debug_ai_fire`, weapon forward rays | No AI unit tests |
-| Combat | `CombatStats.debug_name` prints | No damage table regression tests |
-| Audio/VFX | Autoload export tunables | No bus/profile matrix |
-| Spawns | `debug_show_spawn_markers` | Failed gen only logged to console |
-
-### Other technical debt (from audit)
-
-- No dedicated **audio buses** (`Void` / `Combat` / `UI`)  
-- **NavMesh** not used — grid BFS only for arena validity  
-- Legacy `scenes/arenas/*` + `arena_zone.gd` not used by round flow  
-- `PerforableWallGrid` unused in build pipeline  
-- Collision: most gameplay on **layer 1** (see [tech/ARCHITECTURE.md](tech/ARCHITECTURE.md) for corpse layer 8 note — verify against current `project.godot`)
+- [TECHNICAL_AUDIT.md](TECHNICAL_AUDIT.md) — issue register + fix guidance  
+- [VOID_PROTOTYPE_AUDIT.md](VOID_PROTOTYPE_AUDIT.md) — design gaps  
+- `.cursor/rules/void-code-safety.mdc` — AI change discipline  
 
 ---
 
-## 5. Quick reference — groups
-
-| Group | Used for |
-|-------|----------|
-| `game_manager` | Round flow |
-| `player` / `arena_opponent` | Fighters |
-| `arena_generator` | Floor raycasts, bounds |
-| `weapon_manager` | Player weapon HUD |
-| `projectile` | Round cleanup |
-| `destructible_wall` / `arena_wall` / `structural_wall` | Combat + AI LOS |
-| `structural_geometry` | Non-damage floors/walls |
-| `arena_ui` / `crosshair` | HUD |
-| `void_gas_controller` | Fall/edge atmosphere |
-| `combat_vfx` | Short-lived combat nodes (timer free) |
-| `corpse` / `void_effect` / `gib_chunk` | Round cleanup |
-
----
-
-## 6. Directory index (`scripts/`)
-
-| Folder | Contents |
-|--------|----------|
-| `arena/` | Templates, generator, maze, walls, route validation, builders |
-| `weapons/` | Defs, firing, projectiles, hit resolver |
-| `enemies/` | AI, enemy weapons, mount |
-| `movement/` | Locomotion, camera feel, FOV, dodge |
-| `effects/` | Combat VFX, void/gore/death, corpses, gibs |
-| `environment/` | Void gas, atmosphere, audio autoload, legacy arena_zone |
-| `audio/` | `CombatAudio`, `CombatFeedback`, `AudioStreamFactory` |
-| `animation/` | Enemy look-at, weapon viewmodel bob |
-| `props/` | Debris spawner/chunks, spawn pads |
-| `ui/` | Crosshair |
-| Root | `player.gd`, `game_manager.gd`, `combat_stats.gd`, `game_balance.gd`, `arena_ui.gd`, `push_enemy.gd` (legacy?) |
-
----
-
-*Last mapped: prototype state with procedural arena maze, combat VFX autoload, shield-break feedback pipeline, and GladiatorFov aim stack.*
+*Documentation only — no gameplay code changed. Regenerate this map when adding autoloads, arena pipeline stages, or combat entry points.*
