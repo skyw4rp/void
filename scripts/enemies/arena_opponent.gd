@@ -1,18 +1,35 @@
 ## Elite VOID gladiator AI — predatory arena movement, cover, ring-out tactics.
 extends RigidBody3D
 
-enum AiState { HUNTING, PRESSURING, EVADING, RECOVERING, EXECUTING, IN_COVER }
+enum AiState {
+	HUNTING,
+	PRESSURING,
+	EVADING,
+	RECOVERING,
+	EXECUTING,
+	IN_COVER,
+	REPOSITIONING,
+}
 
-@export var move_force: float = 12.5
-@export var strafe_force: float = 9.5
-@export var retreat_force: float = 12.0
-@export var burst_push_force: float = 18.0
-@export var max_speed: float = 6.5
-@export var micro_strafe_interval_min: float = 0.5
-@export var micro_strafe_interval_max: float = 1.05
+@export_group("Locomotion (player parity)")
+## Uses GladiatorLocomotion-equivalent integration; multiplier only tunes enemy.
+@export var enemy_speed_multiplier: float = 1.0
+@export var dodge_chance_hunt: float = 0.1
+@export var dodge_chance_evade: float = 0.32
+
+@export_group("Human-like AI")
+@export_range(0.0, 1.0) var enemy_skill_level: float = 0.72
+@export var enemy_reaction_time: float = 0.24
+@export var enemy_aim_error_degrees: float = 2.6
+@export var decision_update_interval: float = 0.38
+@export var strafe_switch_interval_min: float = 0.45
+@export var strafe_switch_interval_max: float = 1.15
+@export_range(0.0, 1.0) var aggression_level: float = 0.62
+@export_range(0.0, 1.0) var fear_level: float = 0.38
+@export_range(0.0, 1.0) var enemy_strafe_aggression: float = 0.72
 @export var combat_state_change_interval: float = 0.45
-@export var dodge_chance_hunt: float = 0.08
-@export var dodge_chance_evade: float = 0.28
+@export var debug_enemy_decisions: bool = false
+@export var debug_enemy_movement: bool = false
 @export var debug_ai_movement: bool = false
 @export var void_y: float = -20.0
 @export var aim_height_offset: float = 1.2
@@ -38,7 +55,7 @@ enum AiState { HUNTING, PRESSURING, EVADING, RECOVERING, EXECUTING, IN_COVER }
 @export var fire_attempt_interval_max: float = 0.9
 @export var railgun_fire_interval_min: float = 0.55
 @export var railgun_fire_interval_max: float = 0.95
-@export var railgun_aim_error: float = 0.65
+@export var railgun_aim_error: float = 0.65  ## Legacy offset; primary spread uses enemy_aim_error_degrees
 @export var bazooka_fire_interval_min: float = 0.7
 @export var bazooka_fire_interval_max: float = 1.2
 @export var bazooka_pick_chance_aggressive: float = 0.4
@@ -70,7 +87,6 @@ var _state: AiState = AiState.HUNTING
 var _recovery_timer: float = 0.0
 var _strafe_sign: float = 1.0
 var _direction_change_timer: float = 0.6
-var _burst_push_timer: float = 0.0
 var _state_change_cooldown: float = 0.0
 var _player_airborne_timer: float = 0.0
 var _dodge: CombatDodge = CombatDodge.new()
@@ -90,6 +106,11 @@ var _recovery_reentry_timer: float = 0.0
 var _time_since_last_shot: float = 0.0
 var _last_fire_block_reason: String = ""
 var _edge_zone_logged: int = -1
+var _loco_config: Dictionary = EnemyGladiatorLocomotion.player_parity_config()
+var _decision_timer: float = 0.0
+var _shot_reaction_timer: float = 0.0
+var _stuck_timer: float = 0.0
+var _pending_fire_after_reaction: bool = false
 
 const CORPSE_ALBEDO: Color = Color(0.2, 0.1, 0.12)
 const WALL_GROUP: String = "arena_wall"
@@ -103,9 +124,12 @@ func _ready() -> void:
 	_game_manager = get_tree().get_first_node_in_group("game_manager")
 	_player = get_tree().get_first_node_in_group("player") as Node3D
 	_rng.randomize()
-	_dodge.dodge_distance = 2.0
-	_dodge.dodge_duration = 0.14
-	_dodge.dodge_cooldown = 1.35
+	# Match player dodge burst (player.gd) — fair reposition, not cheat speed.
+	_dodge.dodge_distance = 2.05
+	_dodge.dodge_duration = 0.15
+	_dodge.dodge_cooldown = 1.4
+	_loco_config = EnemyGladiatorLocomotion.player_parity_config()
+	_decision_timer = 0.0
 	_reset_timers()
 	_set_state(AiState.HUNTING)
 	combat_stats.died.connect(_on_combat_died)
@@ -312,29 +336,32 @@ func _physics_process(delta: float) -> void:
 	_try_hard_edge_recovery(offset)
 
 	_state_change_cooldown = maxf(0.0, _state_change_cooldown - delta)
-	_update_combat_state(distance_to_player, offset)
+	_decision_timer -= delta
+	if _decision_timer <= 0.0:
+		_decision_timer = decision_update_interval * _decision_interval_scale()
+		_update_combat_state(distance_to_player, offset)
 
 	if _state == AiState.RECOVERING:
 		_apply_edge_safety_forces(offset, true)
 		_apply_hole_avoidance()
-		_move_toward_center(edge_avoid_force * 1.35)
+		var recover_wish: Vector3 = _direction_to_center()
 		if horizontal_to_player.length_squared() > 0.05:
-			var recover_strafe: Vector3 = (
-				horizontal_to_player.normalized().cross(Vector3.UP) * _strafe_sign
+			recover_wish += (
+				horizontal_to_player.normalized().cross(Vector3.UP) * _strafe_sign * 0.45
 			)
-			apply_central_force(recover_strafe * strafe_force * 0.35)
-		_clamp_horizontal_speed()
+		_apply_parity_locomotion(recover_wish, delta)
 		_prev_horizontal_speed = _horizontal_speed()
 		return
 
 	if _state == AiState.IN_COVER:
 		_apply_edge_safety_forces(offset, true)
 		_apply_hole_avoidance()
-		_apply_cover_seek_force()
-		_apply_idle_strafe()
+		var cover_wish: Vector3 = _pick_cover_direction()
+		if cover_wish == Vector3.ZERO:
+			cover_wish = Vector3(_strafe_sign, 0.0, 0.0)
+		_apply_parity_locomotion(cover_wish + Vector3(_strafe_sign * 0.35, 0.0, 0.0), delta)
 		_update_weapon_ai(delta, distance_to_player, offset)
 		_update_cover_state(delta, offset)
-		_clamp_horizontal_speed()
 		_prev_horizontal_speed = _horizontal_speed()
 		return
 
@@ -345,9 +372,9 @@ func _physics_process(delta: float) -> void:
 	_apply_edge_safety_forces(offset, false)
 	_apply_hole_avoidance()
 	_try_enter_cover(distance_to_player, offset)
-	_update_combat_movement(delta, horizontal_to_player, distance_to_player, offset)
-	if _time_since_last_shot >= stale_reposition_sec:
-		_force_reposition(horizontal_to_player, distance_to_player, offset)
+	if _time_since_last_shot >= stale_reposition_sec and _state != AiState.REPOSITIONING:
+		_set_state(AiState.REPOSITIONING)
+	_apply_human_combat_movement(delta, horizontal_to_player, distance_to_player, offset)
 	_update_weapon_ai(delta, distance_to_player, offset)
 	_update_cover_state(delta, offset)
 
@@ -536,16 +563,22 @@ func _outward_from_arena(pos_offset: Vector3) -> Vector3:
 func _reset_timers() -> void:
 	_weapon_shuffle_timer = randf_range(weapon_shuffle_min, weapon_shuffle_max)
 	_fire_attempt_timer = randf_range(fire_attempt_interval_min, fire_attempt_interval_max)
-	_direction_change_timer = randf_range(micro_strafe_interval_min, micro_strafe_interval_max)
-	_burst_push_timer = randf_range(0.8, 2.0)
+	_direction_change_timer = randf_range(strafe_switch_interval_min, strafe_switch_interval_max)
 	_strafe_sign = 1.0 if _rng.randf() > 0.5 else -1.0
+	_shot_reaction_timer = 0.0
+	_pending_fire_after_reaction = false
+	_stuck_timer = 0.0
 
 
 func _set_state(new_state: AiState, ignore_cooldown: bool = false) -> void:
 	if _state == new_state:
 		return
 	var combat_states: Array = [
-		AiState.HUNTING, AiState.PRESSURING, AiState.EVADING, AiState.EXECUTING,
+		AiState.HUNTING,
+		AiState.PRESSURING,
+		AiState.EVADING,
+		AiState.EXECUTING,
+		AiState.REPOSITIONING,
 	]
 	if (
 		not ignore_cooldown
@@ -573,22 +606,29 @@ func _set_state(new_state: AiState, ignore_cooldown: bool = false) -> void:
 			print("Enemy state: EXECUTING")
 		AiState.IN_COVER:
 			print("Enemy state: IN_COVER")
+		AiState.REPOSITIONING:
+			print("Enemy state: REPOSITIONING")
 
 
 func _update_combat_state(distance: float, offset: Vector3) -> void:
 	if _state == AiState.RECOVERING or _state == AiState.IN_COVER:
 		return
+	var prev: AiState = _state
 	if _is_low_combat():
 		_set_state(AiState.EVADING)
-		return
-	if _is_player_executing():
+	elif _is_player_executing():
 		_set_state(AiState.EXECUTING)
-		return
-	if _should_pressure_player(offset, distance):
+	elif _should_pressure_player(offset, distance):
 		_set_state(AiState.PRESSURING)
-		return
-	if _state in [AiState.EVADING, AiState.EXECUTING, AiState.PRESSURING]:
+	elif _state == AiState.REPOSITIONING and _time_since_last_shot < stale_reposition_sec * 0.5:
+		pass
+	elif _state in [AiState.EVADING, AiState.EXECUTING, AiState.PRESSURING, AiState.REPOSITIONING]:
 		_set_state(AiState.HUNTING)
+	if debug_enemy_decisions and prev != _state:
+		print(
+			"AI decision: %s -> %s dist=%.1f low=%s"
+			% [_state_name(prev), _state_name(_state), distance, _is_low_combat()]
+		)
 
 
 func _is_player_executing() -> bool:
@@ -666,25 +706,6 @@ func _detect_knockback_recovery() -> void:
 		_enter_recovery(false)
 
 
-func _force_reposition(
-	horizontal_to_player: Vector3, distance: float, offset: Vector3
-) -> void:
-	if horizontal_to_player.length_squared() < 0.05:
-		_apply_idle_strafe()
-		_time_since_last_shot = 0.0
-		return
-	var to_player_dir: Vector3 = horizontal_to_player.normalized()
-	if not _has_line_of_sight_to_player():
-		_apply_cover_seek_force()
-		apply_central_force(to_player_dir * move_force * 0.65)
-	else:
-		var strafe_dir: Vector3 = to_player_dir.cross(Vector3.UP).normalized() * _strafe_sign
-		apply_central_force(strafe_dir * strafe_force * 1.1)
-		if distance > ideal_distance_max and _edge_zone(offset) == 0:
-			apply_central_force(to_player_dir * move_force * 0.5)
-	_time_since_last_shot = 0.0
-
-
 func _fire_block_reason(offset: Vector3) -> String:
 	if _state == AiState.RECOVERING:
 		return "recovering"
@@ -744,21 +765,16 @@ func _move_toward_center(force_scale: float) -> void:
 		apply_central_force(to_center * force_scale)
 
 
-func _update_combat_movement(
+func _apply_human_combat_movement(
 	delta: float,
 	horizontal_to_player: Vector3,
 	distance: float,
 	offset: Vector3
 ) -> void:
-	_direction_change_timer -= delta
-	if _direction_change_timer <= 0.0:
-		_strafe_sign = -_strafe_sign if _rng.randf() > 0.2 else _strafe_sign
-		_direction_change_timer = randf_range(micro_strafe_interval_min, micro_strafe_interval_max)
-		if _animator:
-			_animator.set_strafe_sign(_strafe_sign)
+	_tick_strafe_direction(delta)
 
 	if horizontal_to_player.length_squared() < 0.05:
-		_apply_idle_strafe()
+		_apply_parity_locomotion(Vector3(_strafe_sign, 0.0, 0.0), delta)
 		return
 
 	var to_player_dir: Vector3 = horizontal_to_player.normalized()
@@ -768,66 +784,146 @@ func _update_combat_movement(
 	var edge: int = _edge_zone(offset)
 	var player_in_air: bool = _player_airborne_timer > 0.0
 	var can_chase_forward: bool = not player_in_air and _floor_ahead(to_player_dir)
-	var move_scale: float = 1.0
-	var strafe_scale: float = 1.0
-	var retreat_scale: float = 1.0
+	var weapon: WeaponDefs.Id = _weapons.get_weapon() if _weapons else WeaponDefs.Id.SHOTGUN
+	var has_los: bool = _has_line_of_sight_to_player()
+	var fear: float = _effective_fear()
+	var aggression: float = _effective_aggression()
 
-	if edge == 1:
-		move_scale *= 0.75
-		strafe_scale *= 1.05
-	elif edge == 2:
-		move_scale *= 0.45
+	var wish: Vector3 = ArenaOpponentMovement.compute_combat_wish(
+		_state as int,
+		weapon,
+		to_player_dir,
+		distance,
+		_strafe_sign,
+		edge,
+		player_in_air,
+		can_chase_forward,
+		aggression,
+		fear,
+		enemy_strafe_aggression,
+		has_los
+	)
 
-	match _state:
-		AiState.EVADING:
-			retreat_scale = 1.55
-			strafe_scale = 1.45
-			move_scale = 0.35
-		AiState.PRESSURING:
-			move_scale = 1.35
-			strafe_scale = 0.85
-		AiState.EXECUTING:
-			move_scale = 1.5
-			strafe_scale = 1.1
-		AiState.HUNTING:
-			strafe_scale = 1.15
+	if not has_los and distance > close_range:
+		var cover_dir: Vector3 = _pick_cover_direction()
+		if cover_dir != Vector3.ZERO:
+			wish = (wish * 0.45 + cover_dir * 0.55).normalized()
 
-	if player_in_air:
-		move_scale *= 0.45
-		strafe_scale *= 1.35
+	if _state == AiState.REPOSITIONING:
+		var flank: Vector3 = to_player_dir.cross(Vector3.UP) * _strafe_sign
+		wish = (wish * 0.4 + flank * 0.85).normalized()
+		if distance > ideal_distance_max and can_chase_forward:
+			wish = (wish + to_player_dir * 0.35).normalized()
+		if _time_since_last_shot >= stale_reposition_sec * 0.65:
+			_time_since_last_shot = stale_reposition_sec * 0.4
 
-	_burst_push_timer -= delta
-	if _state == AiState.PRESSURING and _burst_push_timer <= 0.0 and can_chase_forward:
-		apply_central_force(to_player_dir * burst_push_force)
-		_burst_push_timer = randf_range(1.4, 2.6)
+	wish = ArenaOpponentMovement.steer_clear_of_walls(self, wish)
+	_apply_parity_locomotion(wish, delta)
+	_update_stuck_recovery(delta, wish)
 
-	if distance < ideal_distance_min or _state == AiState.EVADING:
-		apply_central_force(-to_player_dir * retreat_force * retreat_scale)
-		apply_central_force(strafe_dir * strafe_force * 0.75 * strafe_scale)
-	elif distance > ideal_distance_max:
-		if can_chase_forward:
-			apply_central_force(to_player_dir * move_force * move_scale)
-		elif not _has_line_of_sight_to_player():
-			_apply_cover_seek_force()
-		_move_toward_center(edge_avoid_force * 0.35)
-		apply_central_force(strafe_dir * strafe_force * 0.55 * strafe_scale)
-	else:
-		if not _has_line_of_sight_to_player() and distance > close_range:
-			_apply_cover_seek_force()
-		apply_central_force(strafe_dir * strafe_force * strafe_scale)
-		if can_chase_forward:
-			apply_central_force(to_player_dir * move_force * 0.35 * move_scale)
-
-	if debug_ai_movement:
+	if _debug_movement_enabled():
 		print(
-			"AI spd=%.1f state=%d dodge_cd=%.2f"
-			% [_horizontal_speed(), _state, _dodge.get_cooldown_remaining()]
+			"AI move spd=%.1f wish=%s state=%s wpn=%s dodge=%.2f"
+			% [
+				_horizontal_speed(),
+				wish,
+				_state_name(_state),
+				WeaponDefs.get_data(weapon).get("name", "?"),
+				_dodge.get_cooldown_remaining(),
+			]
 		)
 
 
-func _apply_idle_strafe() -> void:
-	var strafe_axis: Vector3 = Vector3.RIGHT * _strafe_sign
-	apply_central_force(strafe_axis * strafe_force * 0.55)
+func _tick_strafe_direction(delta: float) -> void:
+	_direction_change_timer -= delta
+	if _direction_change_timer <= 0.0:
+		_strafe_sign = -_strafe_sign if _rng.randf() > 0.18 else _strafe_sign
+		_direction_change_timer = randf_range(strafe_switch_interval_min, strafe_switch_interval_max)
+		if _animator:
+			_animator.set_strafe_sign(_strafe_sign)
+
+
+func _apply_parity_locomotion(wish: Vector3, delta: float) -> void:
+	var on_floor: bool = _is_on_arena_floor()
+	var dodge_boost: Vector3 = _dodge.get_active_velocity_boost()
+	var step: EnemyGladiatorLocomotion.StepResult = EnemyGladiatorLocomotion.apply_to_body(
+		self,
+		wish,
+		delta,
+		on_floor,
+		_loco_config,
+		dodge_boost,
+		enemy_speed_multiplier
+	)
+func _is_on_arena_floor() -> bool:
+	if _arena_generator:
+		return _arena_generator.has_floor_at(global_position.x, global_position.z)
+	var space: PhysicsDirectSpaceState3D = get_world_3d().direct_space_state
+	if space == null:
+		return true
+	var from: Vector3 = global_position
+	var to: Vector3 = from + Vector3.DOWN * 0.42
+	var query := PhysicsRayQueryParameters3D.create(from, to)
+	query.collision_mask = 1
+	query.exclude = [get_rid()]
+	return not space.intersect_ray(query).is_empty()
+
+
+func _update_stuck_recovery(delta: float, wish: Vector3) -> void:
+	if wish.length_squared() < 0.05:
+		_stuck_timer = 0.0
+		return
+	if _horizontal_speed() > 1.2:
+		_stuck_timer = 0.0
+		return
+	_stuck_timer += delta
+	if _stuck_timer < 0.55:
+		return
+	_stuck_timer = 0.0
+	_strafe_sign = -_strafe_sign
+	if _animator:
+		_animator.set_strafe_sign(_strafe_sign)
+	if debug_enemy_movement:
+		print("AI stuck recovery: flip strafe")
+
+
+func _effective_aggression() -> float:
+	return clampf(aggression_level * (0.55 + enemy_skill_level * 0.55), 0.0, 1.0)
+
+
+func _effective_fear() -> float:
+	return clampf(fear_level * (1.15 - enemy_skill_level * 0.45), 0.0, 1.0)
+
+
+func _decision_interval_scale() -> float:
+	return lerpf(1.35, 0.82, enemy_skill_level)
+
+
+func _effective_reaction_time() -> float:
+	return maxf(0.06, enemy_reaction_time * lerpf(1.45, 0.75, enemy_skill_level))
+
+
+func _debug_movement_enabled() -> bool:
+	return debug_enemy_movement or debug_ai_movement
+
+
+func _state_name(state: AiState) -> String:
+	match state:
+		AiState.HUNTING:
+			return "HUNTING"
+		AiState.PRESSURING:
+			return "PRESSURING"
+		AiState.EVADING:
+			return "EVADING"
+		AiState.RECOVERING:
+			return "RECOVERING"
+		AiState.EXECUTING:
+			return "EXECUTING"
+		AiState.IN_COVER:
+			return "IN_COVER"
+		AiState.REPOSITIONING:
+			return "REPOSITIONING"
+	return "?"
 
 
 func _update_weapon_ai(delta: float, distance: float, offset: Vector3) -> void:
@@ -840,6 +936,13 @@ func _update_weapon_ai(delta: float, distance: float, offset: Vector3) -> void:
 		]
 		_weapons.switch_weapon(options.pick_random())
 		_weapon_shuffle_timer = randf_range(weapon_shuffle_min, weapon_shuffle_max)
+
+	if _shot_reaction_timer > 0.0:
+		_shot_reaction_timer -= delta
+		if _shot_reaction_timer <= 0.0 and _pending_fire_after_reaction:
+			_pending_fire_after_reaction = false
+			_try_shot(offset)
+		return
 
 	_fire_attempt_timer -= delta
 	if _fire_attempt_timer > 0.0:
@@ -860,7 +963,14 @@ func _update_weapon_ai(delta: float, distance: float, offset: Vector3) -> void:
 		_fire_attempt_timer = maxf(
 			_fire_attempt_timer, randf_range(bazooka_fire_interval_min, bazooka_fire_interval_max)
 		)
-	_try_shot(offset)
+
+	_shot_reaction_timer = _effective_reaction_time() * _rng.randf_range(0.88, 1.18)
+	_pending_fire_after_reaction = true
+	if debug_enemy_decisions:
+		print(
+			"AI fire queued wpn=%s react=%.2fs dist=%.1f"
+			% [WeaponDefs.get_data(preferred).get("name", "?"), _shot_reaction_timer, distance]
+		)
 
 
 func _choose_weapon(distance: float, enemy_offset: Vector3) -> WeaponDefs.Id:
@@ -870,6 +980,7 @@ func _choose_weapon(distance: float, enemy_offset: Vector3) -> WeaponDefs.Id:
 	var ringout_shot: bool = _has_ringout_shot_angle()
 	var aggressive: bool = player_near_edge or ringout_shot
 	var has_los: bool = _has_line_of_sight_to_player()
+	var ideal: Vector2 = ArenaOpponentMovement.weapon_ideal_range(WeaponDefs.Id.SHOTGUN)
 
 	if distance < close_range:
 		return WeaponDefs.Id.SHOTGUN
@@ -877,25 +988,37 @@ func _choose_weapon(distance: float, enemy_offset: Vector3) -> WeaponDefs.Id:
 	if not has_los and distance < medium_range:
 		return WeaponDefs.Id.SHOTGUN
 
-	if aggressive:
-		if distance < medium_range and randf() < bazooka_pick_chance_aggressive:
+	ideal = ArenaOpponentMovement.weapon_ideal_range(WeaponDefs.Id.BAZOOKA)
+	if distance >= ideal.x and distance <= ideal.y:
+		if aggressive and _rng.randf() < bazooka_pick_chance_aggressive:
 			return WeaponDefs.Id.BAZOOKA
+		if not _is_past_safe(enemy_offset) and _rng.randf() < bazooka_pick_chance_medium:
+			return WeaponDefs.Id.BAZOOKA
+
+	if distance < ideal.x:
 		if distance < close_range + 2.5:
 			return WeaponDefs.Id.SHOTGUN
+		return WeaponDefs.Id.SHOTGUN
 
-	if distance < medium_range and not _is_past_safe(enemy_offset):
-		if randf() < bazooka_pick_chance_medium:
+	if aggressive:
+		if distance < medium_range and _rng.randf() < bazooka_pick_chance_aggressive:
 			return WeaponDefs.Id.BAZOOKA
 
-	if distance > medium_range and has_los:
-		if randf() > 0.32:
+	ideal = ArenaOpponentMovement.weapon_ideal_range(WeaponDefs.Id.RAILGUN)
+	if distance >= ideal.x and distance <= ideal.y and has_los:
+		if _rng.randf() > 0.28:
 			return WeaponDefs.Id.RAILGUN
-		return WeaponDefs.Id.BAZOOKA
+
+	if distance > medium_range and has_los:
+		if _rng.randf() > 0.32:
+			return WeaponDefs.Id.RAILGUN
+		if distance >= ArenaOpponentMovement.weapon_ideal_range(WeaponDefs.Id.BAZOOKA).x:
+			return WeaponDefs.Id.BAZOOKA
 
 	if distance > medium_range:
 		return WeaponDefs.Id.BAZOOKA
 
-	if has_los and randf() > 0.28:
+	if has_los and _rng.randf() > 0.28:
 		return WeaponDefs.Id.RAILGUN
 	return WeaponDefs.Id.SHOTGUN
 
@@ -1052,9 +1175,9 @@ func _try_shot(offset: Vector3) -> void:
 		_log_fire_blocked("no_aim_target")
 		return
 
-	var aim_point: Vector3 = _last_valid_weapon_aim_position
+	var aim_point: Vector3 = _last_valid_weapon_aim_position + _sample_aim_error()
 	if _weapons.get_weapon() == WeaponDefs.Id.RAILGUN:
-		aim_point += _sample_railgun_aim_error()
+		aim_point += _sample_railgun_aim_error() * 0.35
 	align_weapon_to_target(aim_point, true)
 	if _look_at:
 		_look_at.trigger_aim_lock(0.25)
@@ -1073,6 +1196,17 @@ func _try_shot(offset: Vector3) -> void:
 			print("Enemy firing with visual target synced")
 
 
+func _sample_aim_error() -> Vector3:
+	var deg: float = enemy_aim_error_degrees * lerpf(1.35, 0.45, enemy_skill_level)
+	var dist: float = global_position.distance_to(_last_valid_weapon_aim_position)
+	var spread: float = dist * tan(deg * PI / 180.0)
+	return Vector3(
+		_rng.randf_range(-spread, spread),
+		_rng.randf_range(-spread * 0.35, spread * 0.35),
+		_rng.randf_range(-spread, spread)
+	)
+
+
 func _sample_railgun_aim_error() -> Vector3:
 	var e: float = railgun_aim_error
 	return Vector3(randf_range(-e, e), randf_range(-e * 0.45, e * 0.45), randf_range(-e, e))
@@ -1081,9 +1215,15 @@ func _sample_railgun_aim_error() -> Vector3:
 func _clamp_horizontal_speed() -> void:
 	var vel: Vector3 = linear_velocity
 	var horizontal: Vector3 = Vector3(vel.x, 0.0, vel.z)
-	var cap: float = max_speed
+	var on_floor: bool = _is_on_arena_floor()
+	var cap: float = (
+		float(_loco_config.get("max_ground_speed", 7.6))
+		if on_floor
+		else float(_loco_config.get("max_air_speed", 9.0))
+	)
+	cap *= enemy_speed_multiplier
 	if _dodge.is_active():
-		cap = max_speed * 1.22
+		cap *= 1.22
 	if horizontal.length() > cap:
 		horizontal = horizontal.normalized() * cap
 		linear_velocity = Vector3(horizontal.x, vel.y, horizontal.z)

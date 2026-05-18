@@ -12,11 +12,11 @@ Audit date: prototype state with arena 1v1, `GladiatorLocomotion`, `WeaponMount`
 
 | | |
 |---|---|
-| **Current state** | Quake-style `GladiatorLocomotion` on player (`ground_acceleration` 46, friction 5.5, max ground **7.6** / air **9.0**, strafe boost, dodge burst). Enemy `RigidBody3D` forces (~12.5) capped ~**6.5** — slower than player, readable duel pace. No root-motion lock on player. |
-| **Gap** | Top speed was retuned down for “readable combat” — can read **slightly heavy/safe** vs classic Q3A aggression; dodge is short (**2.05 u**) and long cooldown (**1.4 s**). Enemy physics movement does not share the same accel/friction model (different feel family). |
-| **Concrete fix** | A/B tune `max_ground_speed` / `ground_acceleration` toward snappier strafe-stop without float; optional “VOID sprint” only on long straights. Document target speeds in `GameBalance`. Align enemy **feel** via force curves, not player slowdown alone. |
-| **Priority** | **P1** |
-| **Files** | `scripts/player.gd`, `scripts/movement/gladiator_locomotion.gd`, `scripts/movement/combat_dodge.gd`, `scripts/game_balance.gd`, `scripts/enemies/arena_opponent.gd` |
+| **Current state** | Player: `GladiatorLocomotion` (~**7.6** ground / **9.0** air). Enemy: **parity locomotion** via `EnemyGladiatorLocomotion` + human-like states (HUNTING…REPOSITIONING), reaction delay, aim error, weapon-range strafe. No player stat changes. |
+| **Gap** | RigidBody vs CharacterBody integration still differs under heavy knockback stacks; `enemy_skill_level` needs playtest bands; optional jump parity not implemented (player jump unused in duel). |
+| **Concrete fix** | Playtest `enemy_skill_level` 0.55–0.85; tune `enemy_strafe_aggression` per weapon; add enemy jump only if vertical arenas ship. |
+| **Priority** | **P2** (tuning) |
+| **Files** | `scripts/enemies/enemy_gladiator_locomotion.gd`, `arena_opponent_movement.gd`, `arena_opponent.gd`, `PROTOTYPE.md` parity table |
 
 ---
 

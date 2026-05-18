@@ -229,38 +229,81 @@ WeaponMount (EnemyWeaponMount)
 **Hard-synced aim:** `ArenaOpponent` owns `_current_aim_target`, `_last_valid_weapon_aim_position` (`+1.2` Y), `_last_valid_head_aim_position` (`+1.45` Y); updated and pushed to `EnemyLookAtController` **every physics frame before any AI early return** (including countdown). `_try_shot()` calls `align_weapon_to_target()` then fires from **Muzzle** along `get_weapon_forward()` (`-WeaponMount.basis.z`). `force_visual_aim_refresh()` after respawn (GameManager). Debug: `debug_show_weapon_forward` / `debug_show_muzzle` on mount. **Limitation:** placeholder meshes, not a skeletal rig.
 
 ### States
-- **HUNTING** — default predatory arena movement
-- **PRESSURING** — player near edge or ring-out angle; burst pushes
-- **EVADING** — AI low shield/health; micro-strafes + dodge bursts
-- **EXECUTING** — player low health; aggressive closes
-- **RECOVERING** (0.8–1.2s) — after heavy knockback or near rim; no shooting
-- **IN_COVER** — breaks LOS, peeks to fire
+- **HUNTING** — default; parity locomotion toward player with weapon-range strafe
+- **PRESSURING** — player near edge or ring-out angle; advances while strafing
+- **EVADING** — low shield/health; retreat + heavy strafe + dodge bursts
+- **EXECUTING** — player low health; aggressive close with strafe
+- **RECOVERING** (0.55–0.9 s) — after heavy knockback or hard edge; inward + light strafe; no fire
+- **IN_COVER** — breaks LOS, peeks to fire from cover direction
+- **REPOSITIONING** — stale engagement (~**3 s** no shot); flank strafe + optional advance
 
-Debug: `Enemy state: HUNTING` / `PRESSURING` / …, optional `debug_ai_movement`
+Debug: `debug_enemy_decisions`, `debug_enemy_movement` (legacy `debug_ai_movement` still works), `debug_ai_fire`
+
+### Enemy AI — human-like opponent model
+
+**Goal:** Rival arena player — same movement *rules* as the human, not the same input. No teleport, snap, or impossible accel.
+
+**Modules:**
+- `scripts/enemies/enemy_gladiator_locomotion.gd` — horizontal integrate (mirrors `GladiatorLocomotion`)
+- `scripts/enemies/arena_opponent_movement.gd` — weapon-range wishes, wall steer
+- `scripts/enemies/arena_opponent.gd` — state machine, aim, fire, edge safety
+
+**Imperfection (tunable exports on `ArenaOpponent`):**
+| Export | Role |
+|--------|------|
+| `enemy_skill_level` (0–1) | Faster decisions, tighter aim, more aggression |
+| `enemy_reaction_time` | Delay before shot after choosing to fire |
+| `enemy_aim_error_degrees` | Angular spread → world offset by distance |
+| `decision_update_interval` | State re-eval cadence (scaled by skill) |
+| `strafe_switch_interval_*` | Strafe direction flip timing |
+| `aggression_level` / `fear_level` | Pressure vs self-preservation |
+| `enemy_strafe_aggression` | Circle-strafe weight in combat band |
+| `enemy_speed_multiplier` | Scales parity caps only (not player) |
+
+**Weapon-aware movement** (current weapon drives ideal range):
+| Weapon | Ideal distance (approx) | Movement bias |
+|--------|-------------------------|---------------|
+| Railgun | 7.5–13.5 | Medium/long; strafe + peek; avoid rush |
+| Shotgun | 2.8–6.2 | Close; circle strafe; pressure |
+| Bazooka | 5.5–10.5 | Splash band; lateral; avoid point-blank |
+
+### Movement parity (player vs enemy)
+
+| Parameter | Player (`player.gd`) | Enemy (parity config) |
+|-----------|-------------------|------------------------|
+| Max ground speed | **7.6** | **7.6** × `enemy_speed_multiplier` |
+| Max air speed | **9.0** | **9.0** × multiplier |
+| Ground acceleration | **46** | **46** × multiplier |
+| Air acceleration | **17** | **17** × multiplier |
+| Friction | **5.5** | **5.5** |
+| Air control | **0.48** | **0.48** |
+| Strafe boost | **1.08** | **1.08** |
+| Dodge distance / duration / cooldown | **2.05 / 0.15 / 1.4** | **same** (AI chance-based) |
+| Integration | `CharacterBody3D` + `GladiatorLocomotion.step` | `RigidBody3D` + `EnemyGladiatorLocomotion.apply_to_body` |
+
+Enemy still uses **RigidBody3D** collision/knockback; velocity is integrated each frame to match player horizontal rules, then hard-capped. Edge/hole helpers remain additive for arena safety.
 
 ### Gladiator locomotion (VOID arena mastery)
 
-**Philosophy:** Quake III / UT / DOOM Eternal–inspired — fast, physics-driven, skill-rewarding. Retuned for **heavier, more readable** arena combat: still elite gladiators, not slow military movement.
+**Philosophy:** Quake III / UT / DOOM Eternal–inspired — fast, physics-driven, skill-rewarding.
 
-**Player** (`player.gd` + `scripts/movement/`):
-- Quake-style accel/friction/air control — ~**7.6** ground / **9.0** air max speed (down from 9.8 / 11)
-- **Shift + direction** or **double-tap WASD** → short dodge (~**2.05** u, **1.4 s** cooldown)
-- Camera: `GladiatorFov` — base **78°**, smooth blend; movement +0–4°, weapon pulse ~+1.25°, void fall up to +24°; gameplay clamp **base−2 … base+6**; aim on `AimPivot`, roll/kick on `CameraFeelPivot`
-- Rocket jump force unchanged; knockback flow preserved
-- **Viewmodel motion:** `WeaponManager/WeaponViewmodelAnimator` (`scripts/animation/weapon_viewmodel_animator.gd`) — sway, walk bob, per-weapon recoil (railgun snap / shotgun kick / bazooka heavy), switch dip on 1–3. Visual only on view meshes.
-
-**Enemy:** Controlled speed (~**12.5** move force, **6.5** max speed). **Soft edge** (past safe): inward steer while still strafing/shooting. **Hard edge** (past danger): short **RECOVERING** burst (**0.55–0.9 s**) with **1.5 s** re-entry cooldown — no fire only in hard zone. Stale aim (**3 s** no shot) forces reposition. States: HUNTING / PRESSURING / EVADING / EXECUTING / IN_COVER stay active fighters.
+**Player** (`player.gd` + `scripts/movement/`) — unchanged by AI work:
+- Quake-style accel/friction/air control — ~**7.6** ground / **9.0** air max speed
+- **Shift + direction** or **double-tap WASD** → dodge (~**2.05** u, **1.4 s** cooldown)
+- Camera: `GladiatorFov` on `AimPivot` / `CameraFeelPivot`
+- Viewmodel: `WeaponViewmodelAnimator` (visual only)
 
 ### Arena awareness
 - Rectangular bounds from `ArenaGenerator.get_current_arena_bounds()`
-- Counter-force if velocity drifts toward an open edge
-- No forward chase while near sides/ends (anti-suicide)
+- Soft edge: inward wish reduction + steer forces
+- Hard edge: **RECOVERING** burst; velocity outward toward void countered
+- Wall probe steer (`ArenaOpponentMovement.steer_clear_of_walls`)
+- Stuck timer flips strafe if speed stays low while wishing to move
 
 ### Combat movement
-- Too close → retreat + light strafe
-- Too far → advance (if safe) + strafe
-- Mid range → circle-strafe with direction flips every **1–2 s**
-- Never stands still (idle strafe if overlapping)
+- Continuous strafe in band; advance/retreat by weapon ideal range + state
+- Cover seek when LOS blocked; **REPOSITIONING** after stale shots
+- Fire gated by `enemy_reaction_time` (human reaction delay)
 
 ### Weapons (same stats as player)
 - **Shotgun** — close range spread pressure (large readable pellets)
@@ -509,6 +552,8 @@ Godot 4.6+ → **F5** → `res://scenes/main.tscn`
 scripts/game_manager.gd
 scripts/ui/crosshair.gd
 scripts/enemies/arena_opponent.gd
+scripts/enemies/enemy_gladiator_locomotion.gd
+scripts/enemies/arena_opponent_movement.gd
 scripts/enemies/enemy_weapon_manager.gd
 scripts/arena_ui.gd
 scripts/player.gd
