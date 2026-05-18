@@ -1,6 +1,6 @@
 ## VOID audio director — void ambience, proximity, danger pulses, combat feedback.
-## Autoload: plays procedural placeholders until real assets exist (see audio/README_REPLACE_ASSETS.md).
-class_name VoidAudio
+## Autoload singleton `VoidAudio` in project.godot (no class_name — avoids hide conflict).
+## Plays procedural placeholders until real assets exist (see audio/README_REPLACE_ASSETS.md).
 extends Node
 
 const SFX_3D_POOL_SIZE: int = 10
@@ -12,7 +12,7 @@ const HIT_SOUND_COOLDOWN_SEC: float = 0.045
 @export var combat_volume_db: float = -4.0
 @export var enemy_combat_volume_db: float = -7.0
 
-static var _instance: VoidAudio
+static var _instance: Node
 
 var _ambience_player: AudioStreamPlayer
 var _proximity_player: AudioStreamPlayer
