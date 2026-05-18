@@ -4,6 +4,29 @@ Godot 4.6 first-person **knock-off duel** across **large suspended arenas** over
 
 **Art direction:** [art/ART_DIRECTION.md](art/ART_DIRECTION.md) (canonical) · [ART_DIRECTION_VOID.md](ART_DIRECTION_VOID.md) (prototype implementation index) · [VOID design philosophy](VOID_DESIGN_PHILOSOPHY.md) · [VOID prototype audit](VOID_PROTOTYPE_AUDIT.md) · [docs index](README.md)
 
+## Game flow (MVP Gladiator Chamber)
+
+**Entry:** `res://scenes/chamber/gladiator_chamber.tscn` (`project.godot` main scene)
+
+```
+Gladiator Chamber → prepare loadout (E on racks/pedestals) → Arena Terminal [E] START MATCH
+    → arena_match.tscn (full duel) → match over → return to chamber (win/loss mood)
+```
+
+| Piece | Path / role |
+|-------|-------------|
+| Chamber | `scenes/chamber/gladiator_chamber.tscn` + `scripts/chamber/gladiator_chamber.gd` |
+| Arena duel | `scenes/arena/arena_match.tscn` (copy of legacy `scenes/main.tscn` + bridge) |
+| Loadout save | Autoload `GladiatorLoadout` → `user://gladiator_loadout.cfg` |
+| Scene flow | Autoload `GameFlow` — chamber ↔ arena |
+| Bridge | `scripts/chamber/arena_match_bridge.gd` — apply weapon, return after ~2.8 s |
+
+**Chamber interact (E):** weapon racks (railgun / shotgun / bazooka), armor pedestals (light / medium / heavy), helmet stands (custodian / observer / faceless). **Visual only** for armor/helmet in arena MVP; weapon applies via `WeaponManager.switch_weapon`.
+
+**Return mood:** victory = clearer fog / brighter key (~55 s); defeat = heavier fog / dim key (~28 s). See [VOID_RETURN_LOOP.md](VOID_RETURN_LOOP.md).
+
+**Legacy:** `scenes/main.tscn` — same arena content; not the run entry point.
+
 ## Game rules
 
 | Rule | Detail |
@@ -541,14 +564,20 @@ Center-screen reticle on the UI layer — drawn with `_draw()` (no textures).
 | Left click | Fire |
 | Esc | Release mouse |
 | Left click (cursor free) | Re-capture mouse |
+| **E** | **Chamber interact** (weapon / armor / helmet / terminal) |
 
 ## Run
 
-Godot 4.6+ → **F5** → `res://scenes/main.tscn`
+Godot 4.6+ → **F5** → `res://scenes/chamber/gladiator_chamber.tscn`
 
 ## Key scripts
 
 ```
+scripts/chamber/gladiator_chamber.gd
+scripts/chamber/gladiator_loadout.gd
+scripts/chamber/game_flow.gd
+scripts/chamber/arena_match_bridge.gd
+scripts/chamber/chamber_player.gd
 scripts/game_manager.gd
 scripts/ui/crosshair.gd
 scripts/enemies/arena_opponent.gd

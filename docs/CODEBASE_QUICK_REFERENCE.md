@@ -2,7 +2,9 @@
 
 One-page onboarding cheat sheet. Full detail: [CODEBASE_MAP.md](CODEBASE_MAP.md) · Audit: [TECHNICAL_AUDIT.md](TECHNICAL_AUDIT.md) · Safety: `.cursor/rules/void-code-safety.mdc`
 
-**Entry** `scenes/main.tscn` · **Autoloads** `VoidAudio`, `CombatVfxDirector` · **Win** first to **5** rounds
+**Entry** `scenes/chamber/gladiator_chamber.tscn` · **Arena** `scenes/arena/arena_match.tscn` · **Autoloads** `VoidAudio`, `CombatVfxDirector`, `GladiatorLoadout`, `GameFlow` · **Win** first to **5** rounds
+
+**Loop:** Chamber (E: loadout) → Terminal START MATCH → arena → return chamber
 
 ---
 

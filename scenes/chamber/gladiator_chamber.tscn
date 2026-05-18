@@ -1,0 +1,85 @@
+[gd_scene load_steps=4 format=3 uid="uid://cgladiatorchamber01"]
+
+[ext_resource type="Script" path="res://scripts/chamber/gladiator_chamber.gd" id="1_chamber"]
+[ext_resource type="Script" path="res://scripts/chamber/chamber_player.gd" id="2_player"]
+[ext_resource type="Script" path="res://scripts/chamber/chamber_hud.gd" id="3_hud"]
+
+[sub_resource type="CapsuleShape3D" id="CapsuleShape3D_player"]
+radius = 0.35
+height = 1.8
+
+[node name="GladiatorChamber" type="Node3D"]
+script = ExtResource("1_chamber")
+
+[node name="ChamberPlayer" type="CharacterBody3D" parent="."]
+transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, 0, 1, 2)
+collision_layer = 1
+collision_mask = 1
+script = ExtResource("2_player")
+
+[node name="Camera3D" type="Camera3D" parent="ChamberPlayer"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.65, 0)
+fov = 78.0
+current = true
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="ChamberPlayer"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.9, 0)
+shape = SubResource("CapsuleShape3D_player")
+
+[node name="ChamberHUD" type="CanvasLayer" parent="."]
+script = ExtResource("3_hud")
+
+[node name="TitleLabel" type="Label" parent="ChamberHUD"]
+anchors_preset = 5
+anchor_left = 0.5
+anchor_right = 0.5
+offset_left = -220.0
+offset_top = 16.0
+offset_right = 220.0
+offset_bottom = 48.0
+theme_override_colors/font_color = Color(0.75, 0.78, 0.82, 1)
+theme_override_font_sizes/font_size = 20
+text = "GLADIATOR CHAMBER"
+horizontal_alignment = 1
+
+[node name="LoadoutLabel" type="Label" parent="ChamberHUD"]
+anchors_preset = 7
+anchor_left = 0.5
+anchor_top = 1.0
+anchor_right = 0.5
+anchor_bottom = 1.0
+offset_left = -320.0
+offset_top = -72.0
+offset_right = 320.0
+offset_bottom = -40.0
+theme_override_colors/font_color = Color(0.55, 0.92, 1, 1)
+theme_override_font_sizes/font_size = 16
+text = "Weapon: Railgun  |  Medium Armor  |  Faceless"
+horizontal_alignment = 1
+
+[node name="PromptLabel" type="Label" parent="ChamberHUD"]
+anchors_preset = 7
+anchor_left = 0.5
+anchor_top = 1.0
+anchor_right = 0.5
+anchor_bottom = 1.0
+offset_left = -280.0
+offset_top = -108.0
+offset_right = 280.0
+offset_bottom = -76.0
+theme_override_colors/font_color = Color(0.92, 0.93, 0.95, 1)
+theme_override_font_sizes/font_size = 18
+text = ""
+horizontal_alignment = 1
+
+[node name="HintLabel" type="Label" parent="ChamberHUD"]
+anchors_preset = 2
+anchor_top = 1.0
+anchor_bottom = 1.0
+offset_left = 16.0
+offset_top = -36.0
+offset_right = 520.0
+offset_bottom = -12.0
+theme_override_colors/font_color = Color(0.45, 0.48, 0.52, 1)
+theme_override_font_sizes/font_size = 14
+text = "WASD move · E interact · Terminal south · Observatory north"

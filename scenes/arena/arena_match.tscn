@@ -1,0 +1,283 @@
+[gd_scene format=3 uid="uid://carenamatch01"]
+
+[ext_resource type="Script" path="res://scripts/player.gd" id="1_player"]
+[ext_resource type="Script" path="res://scripts/chamber/arena_match_bridge.gd" id="12_arena_bridge"]
+[ext_resource type="PackedScene" path="res://scenes/environment/void_atmosphere.tscn" id="7_void_atmosphere"]
+[ext_resource type="Script" path="res://scripts/combat_stats.gd" id="6_combat_stats"]
+[ext_resource type="PackedScene" uid="uid://cweaponmanager01" path="res://scenes/weapons/weapon_manager.tscn" id="2_weapon_manager"]
+[ext_resource type="Script" path="res://scripts/game_manager.gd" id="3_game_manager"]
+[ext_resource type="Script" path="res://scripts/environment/void_gas_controller.gd" id="10_void_gas"]
+[ext_resource type="Script" path="res://scripts/arena_ui.gd" id="4_arena_ui"]
+[ext_resource type="PackedScene" uid="uid://carenaopponent01" path="res://scenes/enemies/arena_opponent.tscn" id="5_arena_opponent"]
+[ext_resource type="PackedScene" uid="uid://carenagenerator01" path="res://scenes/arena/arena_generator.tscn" id="8_arena_generator"]
+[ext_resource type="PackedScene" uid="uid://cvoidarch01" path="res://scenes/world/void_distant_architecture.tscn" id="9_void_arch"]
+[ext_resource type="PackedScene" uid="uid://ccrosshair01" path="res://scenes/ui/crosshair.tscn" id="11_crosshair"]
+
+[sub_resource type="Environment" id="Environment_void"]
+background_mode = 1
+background_color = Color(0.018, 0.032, 0.028, 1)
+ambient_light_source = 2
+ambient_light_color = Color(0.05, 0.07, 0.065, 1)
+ambient_light_energy = 0.16
+fog_enabled = true
+fog_mode = 0
+fog_light_color = Color(0.06, 0.14, 0.12, 1)
+fog_density = 0.042
+fog_sky_affect = 0.0
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_bridge"]
+albedo_color = Color(0.11, 0.105, 0.12, 1)
+roughness = 0.94
+metallic = 0.15
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_trim"]
+albedo_color = Color(0.06, 0.055, 0.065, 1)
+roughness = 0.9
+metallic = 0.25
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_rail"]
+albedo_color = Color(0.1, 0.11, 0.13, 1)
+roughness = 0.88
+metallic = 0.45
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_crack"]
+albedo_color = Color(0.02, 0.015, 0.02, 1)
+roughness = 1.0
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_pillar"]
+albedo_color = Color(0.09, 0.085, 0.1, 1)
+roughness = 0.88
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_void"]
+albedo_color = Color(0.002, 0.004, 0.012, 1)
+emission_enabled = true
+emission = Color(0.01, 0.015, 0.04, 1)
+emission_energy_multiplier = 0.15
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_pushbox1"]
+albedo_color = Color(0.22, 0.24, 0.28, 1)
+roughness = 0.82
+metallic = 0.35
+
+[sub_resource type="BoxMesh" id="BoxMesh_unit"]
+size = Vector3(1, 1, 1)
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_bridge"]
+size = Vector3(1, 1, 1)
+
+[sub_resource type="BoxMesh" id="BoxMesh_pushbox"]
+size = Vector3(1, 1, 1)
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_pushbox"]
+size = Vector3(1, 1, 1)
+
+[sub_resource type="CapsuleShape3D" id="CapsuleShape3D_player"]
+radius = 0.4
+height = 1.8
+
+[node name="ArenaMatch" type="Node3D"]
+
+[node name="ArenaMatchBridge" type="Node" parent="."]
+script = ExtResource("12_arena_bridge")
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = SubResource("Environment_void")
+
+[node name="SunLight" type="DirectionalLight3D" parent="."]
+transform = Transform3D(0.866025, -0.353553, 0.353553, 0, 0.707107, 0.707107, -0.5, -0.612372, 0.612372, 0, 14, 6)
+light_color = Color(0.72, 0.85, 0.78, 1)
+light_energy = 2.5
+shadow_enabled = true
+
+[node name="RimLightCold" type="OmniLight3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 4.5, 0)
+light_color = Color(0.45, 0.55, 0.72, 1)
+light_energy = 0.9
+omni_range = 22.0
+
+[node name="EdgeLightNorth" type="OmniLight3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.2, 12)
+light_color = Color(0.55, 0.58, 0.65, 1)
+light_energy = 0.65
+omni_range = 9.0
+
+[node name="EdgeLightSouth" type="OmniLight3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.2, -12)
+light_color = Color(0.55, 0.58, 0.65, 1)
+light_energy = 0.65
+omni_range = 9.0
+
+[node name="VoidAtmosphere" parent="." instance=ExtResource("7_void_atmosphere")]
+
+[node name="VoidGasController" type="Node" parent="."]
+script = ExtResource("10_void_gas")
+
+[node name="VoidDistantArchitecture" parent="." instance=ExtResource("9_void_arch")]
+
+[node name="ArenaGenerator" parent="." instance=ExtResource("8_arena_generator")]
+
+[node name="PitVoid" type="MeshInstance3D" parent="."]
+visible = false
+transform = Transform3D(50, 0, 0, 0, 1, 0, 0, 0, 60, 0, -30, 0)
+material_override = SubResource("StandardMaterial3D_void")
+mesh = SubResource("BoxMesh_unit")
+
+[node name="GameManager" type="Node" parent="."]
+script = ExtResource("3_game_manager")
+
+[node name="ArenaOpponent" parent="." instance=ExtResource("5_arena_opponent")]
+transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, 0, 1, -10)
+
+[node name="Player" type="CharacterBody3D" parent="."]
+collision_layer = 1
+collision_mask = 1
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.1, 10)
+script = ExtResource("1_player")
+
+[node name="Camera3D" type="Camera3D" parent="Player"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.6, 0)
+fov = 78.0
+
+[node name="WeaponManager" parent="Player/Camera3D" instance=ExtResource("2_weapon_manager")]
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Player"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.9, 0)
+shape = SubResource("CapsuleShape3D_player")
+
+[node name="CombatStats" type="Node" parent="Player"]
+script = ExtResource("6_combat_stats")
+debug_name = "Player"
+
+[node name="UI" type="CanvasLayer" parent="."]
+script = ExtResource("4_arena_ui")
+
+[node name="Crosshair" parent="UI" instance=ExtResource("11_crosshair")]
+
+[node name="ScoreLabel" type="Label" parent="UI"]
+anchors_preset = 5
+anchor_left = 0.5
+anchor_right = 0.5
+offset_left = -160.0
+offset_top = 12.0
+offset_right = 160.0
+offset_bottom = 44.0
+theme_override_colors/font_color = Color(0.92, 0.93, 0.98, 1)
+theme_override_font_sizes/font_size = 22
+text = "Player: 0 | Enemy: 0"
+horizontal_alignment = 1
+
+[node name="PlayerStatsLabel" type="Label" parent="UI"]
+anchors_preset = 0
+offset_left = 16.0
+offset_top = 48.0
+offset_right = 360.0
+offset_bottom = 76.0
+theme_override_colors/font_color = Color(0.55, 0.95, 1, 1)
+theme_override_font_sizes/font_size = 18
+text = "Player HP: 100 | Shield: 100"
+
+[node name="EnemyStatsLabel" type="Label" parent="UI"]
+anchors_preset = 1
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -360.0
+offset_top = 48.0
+offset_right = -16.0
+offset_bottom = 76.0
+theme_override_colors/font_color = Color(1, 0.55, 0.5, 1)
+theme_override_font_sizes/font_size = 18
+text = "Enemy HP: 100 | Shield: 100"
+horizontal_alignment = 2
+
+[node name="VoidOverlay" type="ColorRect" parent="UI"]
+visible = false
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+color = Color(0.04, 0.08, 0.18, 0.45)
+
+[node name="VoidGasVignette" type="ColorRect" parent="UI"]
+visible = false
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+color = Color(0.01, 0.05, 0.04, 0)
+
+[node name="VoidGasTint" type="ColorRect" parent="UI"]
+visible = false
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+color = Color(0.04, 0.12, 0.1, 0)
+
+[node name="DeathLabel" type="Label" parent="UI"]
+visible = false
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -240.0
+offset_top = 100.0
+offset_right = 240.0
+offset_bottom = 150.0
+theme_override_colors/font_color = Color(1, 0.35, 0.3, 1)
+theme_override_font_sizes/font_size = 32
+text = "You were eliminated!"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="CountdownLabel" type="Label" parent="UI"]
+visible = false
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -200.0
+offset_top = -80.0
+offset_right = 200.0
+offset_bottom = 80.0
+theme_override_colors/font_color = Color(1, 0.2, 0.15, 1)
+theme_override_font_sizes/font_size = 96
+text = "3"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="MatchLabel" type="Label" parent="UI"]
+visible = false
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -200.0
+offset_top = -28.0
+offset_right = 200.0
+offset_bottom = 28.0
+theme_override_colors/font_color = Color(1, 0.85, 0.35, 1)
+theme_override_font_sizes/font_size = 36
+text = "You Win!"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="WeaponLabel" type="Label" parent="UI"]
+anchors_preset = 2
+anchor_top = 1.0
+anchor_bottom = 1.0
+offset_left = 16.0
+offset_top = -44.0
+offset_right = 280.0
+offset_bottom = -12.0
+theme_override_colors/font_color = Color(0.88, 0.9, 0.95, 1)
+theme_override_font_sizes/font_size = 20
+text = "Weapon: Railgun"

@@ -2,7 +2,7 @@
 
 Technical ownership reference for **Neon Catacombs / VOID** (Godot 4.6). Use with [PROTOTYPE.md](PROTOTYPE.md), [TECHNICAL_AUDIT.md](TECHNICAL_AUDIT.md), [VOID_DESIGN_PHILOSOPHY.md](VOID_DESIGN_PHILOSOPHY.md), and `.cursor/rules/void-code-safety.mdc`.
 
-**Entry:** `res://scenes/main.tscn` · **Autoloads:** `VoidAudio`, `CombatVfxDirector` · **Win:** first to **5** rounds (`GameManager.WIN_SCORE`)
+**Entry:** `res://scenes/chamber/gladiator_chamber.tscn` · **Arena duel:** `res://scenes/arena/arena_match.tscn` · **Autoloads:** `VoidAudio`, `CombatVfxDirector`, `GladiatorLoadout`, `GameFlow` · **Win:** first to **5** rounds (`GameManager.WIN_SCORE`) · **Legacy arena scene:** `scenes/main.tscn`
 
 ---
 
@@ -689,6 +689,19 @@ All toggles are **editor exports** on nodes in `main.tscn` unless noted. Run gam
 |------|--------|
 | `VoidAudio` | `scripts/environment/void_audio.gd` |
 | `CombatVfxDirector` | `scripts/effects/combat_vfx_director.gd` |
+| `GladiatorLoadout` | `scripts/chamber/gladiator_loadout.gd` — `user://gladiator_loadout.cfg` |
+| `GameFlow` | `scripts/chamber/game_flow.gd` — chamber ↔ `arena_match` |
+
+### Gladiator Chamber (MVP hub)
+
+| | |
+|--|--|
+| **Scene** | `scenes/chamber/gladiator_chamber.tscn` |
+| **Builder** | `scripts/chamber/gladiator_chamber.gd` — ~32×26 m brutalist shell + interactables |
+| **Player** | `scripts/chamber/chamber_player.gd` — walk + E interact |
+| **Arena handoff** | `scripts/chamber/arena_match_bridge.gd` on `arena_match.tscn` |
+| **Return mood** | Victory/defeat fog + lights in `gladiator_chamber.gd` |
+
 
 ### Groups (round cleanup)
 
