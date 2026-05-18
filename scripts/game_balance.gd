@@ -63,8 +63,8 @@ const VOID_DISTANT_FLASH_CHANCE: float = 0.42
 const VOID_DISTANT_FLASH_DELAY_MIN: float = 4.0
 const VOID_DISTANT_FLASH_DELAY_MAX: float = 7.0
 
-const VOID_FALL_FOV_START: float = 90.0
-const VOID_FALL_FOV_END: float = 102.0
+## Max FOV increase during void fall (added on top of player base_fov).
+const VOID_FALL_FOV_MAX_ADD: float = 24.0
 
 ## Void pit — score / death trigger (below dense gas layer).
 const VOID_DEATH_Y: float = -32.0

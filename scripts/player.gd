@@ -23,22 +23,34 @@ const LOOK_PITCH_MAX: float = 1.4
 @export var strafe_boost: float = 1.08
 @export var landing_damp: float = 0.5
 @export var movement_tilt_strength: float = 0.03
-@export var speed_fov_boost: float = 6.5
+@export var base_fov: float = 78.0
+@export var speed_fov_boost: float = 4.0
+@export var speed_fov_ground_extra: float = 0.4
 @export var landing_shake_strength: float = 0.14
+@export var weapon_fov_pulse: float = 1.25
 
 @export_group("Dodge")
 @export var dodge_distance: float = 2.05
 @export var dodge_duration: float = 0.15
 @export var dodge_cooldown: float = 1.4
 
+@export_group("Aim")
+@export var crosshair_stabilized: bool = true
+@export var camera_bob_affects_aim: bool = false
+@export var weapon_bob_affects_aim: bool = false
+
 @export_group("Debug")
 @export var debug_movement: bool = false
 
-@onready var camera: Camera3D = $Camera3D
 @onready var combat_stats: CombatStats = $CombatStats
+
+var _aim_pivot: Node3D
+var _camera_feel_pivot: Node3D
+var camera: Camera3D
 
 var _dodge: CombatDodge = CombatDodge.new()
 var _camera_feel: GladiatorCameraFeel = GladiatorCameraFeel.new()
+var _fov: GladiatorFov = GladiatorFov.new()
 var _was_on_floor: bool = true
 var _knockback_blend: float = 0.0
 
@@ -67,7 +79,6 @@ var _void_dying: bool = false
 var _void_fall_shake: float = 0.0
 var _void_fall_time: float = 0.0
 var _void_instability_time: float = 0.0
-var _base_camera_fov: float = GameBalance.VOID_FALL_FOV_START
 var _void_fall_proxy: MeshInstance3D
 
 const CORPSE_ALBEDO: Color = Color(0.42, 0.82, 1.0)
@@ -86,8 +97,13 @@ func _ready() -> void:
 	_dodge.dodge_distance = dodge_distance
 	_dodge.dodge_duration = dodge_duration
 	_dodge.dodge_cooldown = dodge_cooldown
-	_camera_feel.reset(camera)
+	_setup_aim_camera_hierarchy()
+	_fov.configure_base(base_fov)
+	_fov.reset_round(camera, true)
+	_camera_feel.reset(camera, _camera_feel_pivot)
+	_apply_crosshair_stabilization()
 	combat_stats.died.connect(_on_combat_died)
+	_bind_game_flow()
 
 
 func take_damage(
@@ -179,7 +195,6 @@ func begin_void_dying() -> void:
 	_void_fall_time = 0.0
 	_void_fall_shake = 0.0
 	_void_instability_time = 0.0
-	_base_camera_fov = camera.fov
 	collision_layer = 0
 	collision_mask = 0
 	VoidGasController.notify_fall_started(self)
@@ -359,10 +374,12 @@ func arena_respawn(spawn_position: Vector3) -> void:
 	_was_on_floor = true
 	_hide_void_fall_proxy()
 	_exit_death_hidden_state()
-	_camera_feel.reset(camera)
-	camera.rotation.x = 0.0
-	camera.rotation.z = 0.0
-	camera.fov = GameBalance.VOID_FALL_FOV_START
+	_fov.configure_base(base_fov)
+	_fov.reset_round(camera, false)
+	_fov.clear_gameplay_offsets()
+	_camera_feel.reset(camera, _camera_feel_pivot)
+	if _aim_pivot:
+		_aim_pivot.rotation = Vector3.ZERO
 	VoidGasController.notify_fall_ended()
 	# TODO: camera shake or screen flash on respawn.
 
@@ -383,16 +400,15 @@ func _unhandled_input(event: InputEvent) -> void:
 			return
 		var motion := event as InputEventMouseMotion
 		rotate_y(-motion.relative.x * MOUSE_SENSITIVITY)
-		camera.rotate_x(-motion.relative.y * MOUSE_SENSITIVITY)
-		camera.rotation.x = clampf(camera.rotation.x, LOOK_PITCH_MIN, LOOK_PITCH_MAX)
+		if _aim_pivot:
+			_aim_pivot.rotate_x(-motion.relative.y * MOUSE_SENSITIVITY)
+			_aim_pivot.rotation.x = clampf(_aim_pivot.rotation.x, LOOK_PITCH_MIN, LOOK_PITCH_MAX)
 
 
 func _process(delta: float) -> void:
-	if _obliteration_shake > 0.0:
+	if _obliteration_shake > 0.0 and _camera_feel_pivot:
 		_obliteration_shake = maxf(0.0, _obliteration_shake - delta * 0.35)
-		var shake: float = _obliteration_shake * 0.14
-		camera.rotation.x += randf_range(-shake, shake)
-		camera.rotation.z += randf_range(-shake * 0.7, shake * 0.7)
+		_camera_feel.apply_impulse_shake(_camera_feel_pivot, _obliteration_shake)
 
 
 func _physics_process(delta: float) -> void:
@@ -408,27 +424,32 @@ func _physics_process(delta: float) -> void:
 			velocity.x += randf_range(-1.0, 1.0) * 4.0 * delta
 			velocity.z += randf_range(-1.0, 1.0) * 4.0 * delta
 			velocity.y -= _gravity * delta * 0.35
-			camera.rotation.z += randf_range(-0.03, 0.03)
+			if _camera_feel_pivot:
+				_camera_feel_pivot.rotation.z += randf_range(-0.03, 0.03)
 		else:
 			velocity.x = move_toward(velocity.x, 0.0, 2.0)
 			velocity.z = move_toward(velocity.z, 0.0, 2.0)
 			velocity.y -= _gravity * delta
 		_void_fall_time += delta
 		_void_fall_shake = minf(_void_fall_shake + delta * 2.5, 1.0)
-		var shake: float = _void_fall_shake * 0.05
-		camera.rotation.x += randf_range(-shake, shake)
-		if _void_instability_time <= 0.0:
-			camera.rotation.z += randf_range(-shake * 0.5, shake * 0.5)
+		if _camera_feel_pivot:
+			_camera_feel.apply_impulse_shake(_camera_feel_pivot, _void_fall_shake * 0.35)
 		if GameBalance.uses_void_gore_cinematic():
 			var fall_t: float = clampf(
 				_void_fall_time / GameBalance.VOID_GORE_BURST_AT, 0.0, 1.0
 			)
-			camera.fov = lerpf(_base_camera_fov, GameBalance.VOID_FALL_FOV_END, fall_t)
+			_fov.set_void_offset(lerpf(0.0, GameBalance.VOID_FALL_FOV_MAX_ADD, fall_t))
+		if camera:
+			_fov.apply(camera, delta, true)
 		move_and_slide()
 		return
 
 	if _game_manager and _game_manager.has_method("is_fighting") and not _game_manager.is_fighting():
 		velocity = Vector3.ZERO
+		_fov.clear_gameplay_offsets()
+		_fov.set_void_offset(0.0)
+		if camera:
+			_fov.apply(camera, delta, false)
 		move_and_slide()
 		return
 
@@ -471,7 +492,19 @@ func _physics_process(delta: float) -> void:
 		movement_air_accel.emit()
 
 	_knockback_blend = maxf(0.0, _knockback_blend - delta * 2.2)
-	_camera_feel.update(camera, delta, step, input_dir, loco_config, _dodge.is_active())
+	_camera_feel.update(
+		camera,
+		_camera_feel_pivot,
+		delta,
+		step,
+		input_dir,
+		loco_config,
+		_dodge.is_active(),
+		_fov
+	)
+	_fov.set_void_offset(0.0)
+	if camera:
+		_fov.apply(camera, delta, false)
 
 	if debug_movement:
 		print(
@@ -497,8 +530,89 @@ func _locomotion_config() -> Dictionary:
 		"landing_damp": landing_damp,
 		"movement_tilt_strength": movement_tilt_strength,
 		"speed_fov_boost": speed_fov_boost,
+		"speed_fov_ground_extra": speed_fov_ground_extra,
 		"landing_shake_strength": landing_shake_strength,
 	}
+
+
+func get_aim_global_transform() -> Transform3D:
+	if _aim_pivot:
+		return _aim_pivot.global_transform
+	if camera:
+		return camera.global_transform
+	return global_transform
+
+
+func get_aim_forward() -> Vector3:
+	var basis: Basis = get_aim_global_transform().basis
+	var fwd: Vector3 = -basis.z
+	if fwd.length_squared() < 0.0001:
+		return Vector3.FORWARD
+	return fwd.normalized()
+
+
+func _setup_aim_camera_hierarchy() -> void:
+	if has_node("AimPivot/CameraFeelPivot/Camera3D"):
+		_aim_pivot = $AimPivot
+		_camera_feel_pivot = $AimPivot/CameraFeelPivot
+		camera = $AimPivot/CameraFeelPivot/Camera3D
+		_aim_pivot.add_to_group("player_aim")
+		return
+
+	var old_camera: Camera3D = get_node_or_null("Camera3D") as Camera3D
+	if old_camera == null:
+		push_error("Player: missing Camera3D")
+		return
+
+	var eye_height: Vector3 = old_camera.position
+	var saved_pitch: float = old_camera.rotation.x
+	var saved_fov: float = base_fov
+
+	_aim_pivot = Node3D.new()
+	_aim_pivot.name = "AimPivot"
+	add_child(_aim_pivot)
+	_aim_pivot.position = eye_height
+	_aim_pivot.rotation.x = saved_pitch
+	_aim_pivot.add_to_group("player_aim")
+
+	_camera_feel_pivot = Node3D.new()
+	_camera_feel_pivot.name = "CameraFeelPivot"
+	_aim_pivot.add_child(_camera_feel_pivot)
+
+	for child in old_camera.get_children():
+		old_camera.remove_child(child)
+		_camera_feel_pivot.add_child(child)
+
+	remove_child(old_camera)
+	_camera_feel_pivot.add_child(old_camera)
+	old_camera.position = Vector3.ZERO
+	old_camera.rotation = Vector3.ZERO
+	old_camera.fov = saved_fov
+	camera = old_camera
+
+
+func notify_weapon_fov_pulse() -> void:
+	_fov.trigger_weapon_pulse(weapon_fov_pulse)
+
+
+func _bind_game_flow() -> void:
+	if _game_manager == null:
+		return
+	if _game_manager.has_signal("countdown_hidden"):
+		if not _game_manager.countdown_hidden.is_connected(_on_round_countdown_hidden):
+			_game_manager.countdown_hidden.connect(_on_round_countdown_hidden)
+
+
+func _on_round_countdown_hidden() -> void:
+	_fov.configure_base(base_fov)
+	_fov.clear_gameplay_offsets()
+	_fov.set_void_offset(0.0)
+
+
+func _apply_crosshair_stabilization() -> void:
+	var cross: Control = Crosshair.get_instance(get_tree())
+	if cross and cross.has_method("configure_aim_stability"):
+		cross.call("configure_aim_stability", crosshair_stabilized, crosshair_stabilized)
 
 
 func _report_void_fall() -> void:

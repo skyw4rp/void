@@ -105,12 +105,13 @@ static func _configure_continuous_deck(
 
 
 static func _perimeter_fall_markers(danger_hx: float, danger_hz: float) -> Array:
-	return [
+	var markers: Array = [
 		_marker(0.0, danger_hz * 0.96, danger_hx * 1.75, 0.35, 0.0),
 		_marker(0.0, -danger_hz * 0.96, danger_hx * 1.75, 0.35, 0.0),
 		_marker(danger_hx * 0.96, 0.0, 0.35, danger_hz * 1.75, PI * 0.5),
 		_marker(-danger_hx * 0.96, 0.0, 0.35, danger_hz * 1.75, PI * 0.5),
 	]
+	return markers
 
 
 static func _column(cx: float, cz: float, radius: float = 0.85) -> ArenaTemplate.WallPiece:

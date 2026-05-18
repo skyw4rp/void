@@ -6,6 +6,7 @@ signal weapon_switched(weapon: WeaponDefs.Id)
 signal shot_fired
 
 @export var spawn_forward_offset: float = 0.6
+@export var weapon_bob_affects_aim: bool = false
 
 @onready var _camera: Camera3D = get_parent() as Camera3D
 @onready var _railgun_view: Node3D = $RailgunView
@@ -18,6 +19,9 @@ var _cooldown_remaining: float = 0.0
 
 func _ready() -> void:
 	add_to_group("weapon_manager")
+	var player: Node = get_tree().get_first_node_in_group("player")
+	if player and "weapon_bob_affects_aim" in player:
+		weapon_bob_affects_aim = player.weapon_bob_affects_aim
 	switch_weapon(WeaponDefs.Id.RAILGUN)
 
 
@@ -62,9 +66,14 @@ func try_fire() -> bool:
 	if _cooldown_remaining > 0.0:
 		return false
 
-	var base_dir := -_camera.global_transform.basis.z.normalized()
-	var origin := _camera.global_position
-	var aim_basis := _camera.global_transform.basis
+	var aim_xform: Transform3D = _get_aim_transform()
+	var base_dir: Vector3 = -aim_xform.basis.z
+	if base_dir.length_squared() < 0.0001:
+		base_dir = Vector3.FORWARD
+	else:
+		base_dir = base_dir.normalized()
+	var origin: Vector3 = _camera.global_position
+	var aim_basis: Basis = aim_xform.basis
 
 	_cooldown_remaining = WeaponFiring.fire(
 		_current,
@@ -73,14 +82,45 @@ func try_fire() -> bool:
 		aim_basis,
 		get_tree().current_scene,
 		spawn_forward_offset,
-		_camera.get_parent()
+		_get_shooter_body()
 	)
 	if _current == WeaponDefs.Id.RAILGUN:
 		print("Railgun")
 	CombatAudio.play_weapon_fire(_current, origin + base_dir * 0.35, false)
+	var player: Node = get_tree().get_first_node_in_group("player")
+	if player and player.has_method("notify_weapon_fov_pulse"):
+		player.call("notify_weapon_fov_pulse")
 	shot_fired.emit()
 	return true
 
 
 func can_fire() -> bool:
 	return _cooldown_remaining <= 0.0
+
+
+func _get_aim_transform() -> Transform3D:
+	if weapon_bob_affects_aim:
+		return _camera.global_transform
+	var player: Node = get_tree().get_first_node_in_group("player")
+	if player and player.has_method("get_aim_global_transform"):
+		return player.call("get_aim_global_transform") as Transform3D
+	var pivot: Node3D = _resolve_aim_pivot()
+	if pivot:
+		return pivot.global_transform
+	return _camera.global_transform
+
+
+func _resolve_aim_pivot() -> Node3D:
+	var node: Node = _camera
+	while node:
+		if node.name == "AimPivot" and node is Node3D:
+			return node as Node3D
+		node = node.get_parent()
+	return null
+
+
+func _get_shooter_body() -> Node:
+	var player: Node = get_tree().get_first_node_in_group("player")
+	if player:
+		return player
+	return _camera.get_parent()

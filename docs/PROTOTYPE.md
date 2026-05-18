@@ -202,7 +202,7 @@ Debug: `Enemy state: HUNTING` / `PRESSURING` / …, optional `debug_ai_movement`
 **Player** (`player.gd` + `scripts/movement/`):
 - Quake-style accel/friction/air control — ~**7.6** ground / **9.0** air max speed (down from 9.8 / 11)
 - **Shift + direction** or **double-tap WASD** → short dodge (~**2.05** u, **1.4 s** cooldown)
-- Camera: reduced speed FOV boost and strafe tilt
+- Camera: `GladiatorFov` — base **78°**, smooth blend; movement +0–4°, weapon pulse ~+1.25°, void fall up to +24°; gameplay clamp **base−2 … base+6**; aim on `AimPivot`, roll/kick on `CameraFeelPivot`
 - Rocket jump force unchanged; knockback flow preserved
 - **Viewmodel motion:** `WeaponManager/WeaponViewmodelAnimator` (`scripts/animation/weapon_viewmodel_animator.gd`) — sway, walk bob, per-weapon recoil (railgun snap / shotgun kick / bazooka heavy), switch dip on 1–3. Visual only on view meshes.
 
@@ -315,7 +315,7 @@ Fall → freefall → corruption → breakup → burst → **score** → countdo
 | Time | Event |
 |------|--------|
 | **0.0s** | Fall begins; loss of balance / slide; controls off |
-| **0.35s** | Instability / freefall — camera FOV **90→102**, shake ramps |
+| **0.35s** | Instability / freefall — FOV ramps toward **base+24°** max, shake ramps |
 | **0.7s** | Ambient void motes; audio: void wind gust |
 | **1.5s** | Corruption gas cloud (`void_corruption_cloud.tscn`) — green/blue/purple fog, pulsing light |
 | **2.2s** | Body hidden; **8–14** `gib_chunk` physics pieces + blood mist; debug: `Body rupture` |
@@ -407,14 +407,22 @@ Projectiles store a **shooter** and ignore self-hits. Layer 2 projectiles, mask 
 - Bottom: `Weapon: …`
 - Center (on win): `You Win!` or `You Lose!`
 
-### Crosshair (`scenes/ui/crosshair.tscn`, `scripts/ui/crosshair.gd`)
+### Crosshair & aim (`scripts/player.gd`, `scripts/ui/crosshair.gd`)
+
+**Stable aim:** mouse yaw on `Player`, pitch on `AimPivot`. `WeaponManager` fires using `get_aim_global_transform()` (not visual roll/bob). `CameraFeelPivot` child handles roll, FOV, and positional kick only.
+
+| Export (Player) | Default | Role |
+|-----------------|---------|------|
+| `crosshair_stabilized` | `true` | Fixed screen reticle gap while moving |
+| `camera_bob_affects_aim` | `false` | Camera feel does not tilt aim pivot |
+| `weapon_bob_affects_aim` | `false` | Viewmodel bob does not change fire ray |
 
 Center-screen reticle on the UI layer — drawn with `_draw()` (no textures).
 
 | State | Behavior |
 |-------|----------|
 | **Idle** | Compact cyan/white dot + four short lines (~88% alpha) |
-| **Moving / jumping** | Lines spread slightly (weapon-dependent) |
+| **Moving / jumping** | Reticle stays centered (no movement spread when stabilized) |
 | **Shooting** | Quick pulse (gap widens briefly) |
 | **Hit enemy (shield)** | Cyan flash |
 | **Hit enemy (health)** | Red/white flash |

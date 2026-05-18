@@ -54,7 +54,7 @@ var void_y: float = -32.0
 var fall_warning_y: float = -18.0
 ## Inner spawn/debris rectangle (local X/Z half extents from center).
 var spawn_safe_half: Vector2 = Vector2(6.0, 6.0)
-var fall_zones: Array[FallZoneMarker] = []
+var fall_zones: Array = []
 var floor_albedo: Color = Color(0.11, 0.105, 0.12)
 var wall_albedo: Color = Color(0.07, 0.075, 0.085)
 var perimeter: PerimeterConfig = PerimeterConfig.new()

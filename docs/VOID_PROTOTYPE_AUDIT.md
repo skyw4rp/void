@@ -24,11 +24,11 @@ Audit date: prototype state with arena 1v1, `GladiatorLocomotion`, `WeaponMount`
 
 | | |
 |---|---|
-| **Current state** | Raw mouse on body yaw + camera pitch (`MOUSE_SENSITIVITY` 0.002, no smoothing). `GladiatorCameraFeel`: roll tilt, speed FOV, landing shake, air sway, dodge pitch. Void fall widens FOV (**90→102**). Obliteration / void instability add procedural shake. |
-| **Gap** | Landing shake applies **random pitch jitter** on `camera.rotation.x` — can fight precision during recovery. Air sway + void shake stack may feel “cinematic” under heavy knockback. No forward/accel-based view punch (only speed FOV). |
-| **Concrete fix** | Clamp landing shake to roll-only or decay before next shot; cap stacked shake amplitudes. Add tiny forward impulse on land/dodge (position offset, not rotation). Expose sensitivity in settings. Keep void fall FOV but avoid shake during aim-critical windows. |
-| **Priority** | **P1** |
-| **Files** | `scripts/movement/gladiator_camera_feel.gd`, `scripts/player.gd`, `scripts/game_balance.gd` |
+| **Current state** | Raw mouse on body yaw + **`AimPivot` pitch** (stable aim). **`CameraFeelPivot`**: roll, FOV, positional landing/dodge kick (no aim-axis tilt). Fire ray + crosshair use aim pivot; viewmodel bob visual-only. Crosshair movement spread off when `crosshair_stabilized`. |
+| **Gap** | Optional sensitivity menu; shot pulse on crosshair only (no hit direction marker). FOV unified via `GladiatorFov` (smooth round start). |
+| **Concrete fix** | Settings UI for sensitivity; tune `landing_shake_strength` / feel offset exports. |
+| **Priority** | **P2** |
+| **Files** | `scripts/movement/gladiator_camera_feel.gd`, `scripts/player.gd`, `scripts/ui/crosshair.gd`, `scripts/weapons/weapon_manager.gd` |
 
 ---
 

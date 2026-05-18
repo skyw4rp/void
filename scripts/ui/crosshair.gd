@@ -25,6 +25,8 @@ const WEAPON_STYLES: Dictionary = {
 
 
 @export var hide_when_mouse_visible: bool = true
+@export var crosshair_stabilized: bool = true
+@export var movement_spread_affects_crosshair: bool = false
 
 var _weapon: WeaponDefs.Id = WeaponDefs.Id.RAILGUN
 var _move_spread: float = 0.0
@@ -122,6 +124,13 @@ func _draw_kill_marker(center: Vector2, style: Dictionary, base_col: Color) -> v
 	draw_rect(Rect2(center.x - arm - half, center.y + arm - half, t, t), col)
 
 
+func configure_aim_stability(stabilized: bool, disable_movement_spread: bool) -> void:
+	crosshair_stabilized = stabilized
+	movement_spread_affects_crosshair = not disable_movement_spread
+	if crosshair_stabilized:
+		_move_spread = 0.0
+
+
 func set_weapon(weapon: WeaponDefs.Id) -> void:
 	_weapon = weapon
 	queue_redraw()
@@ -214,6 +223,10 @@ func _on_match_over(_player_won: bool) -> void:
 
 
 func _update_movement_spread() -> void:
+	if crosshair_stabilized or not movement_spread_affects_crosshair:
+		_move_spread = move_toward(_move_spread, 0.0, 0.22)
+		return
+
 	var player: CharacterBody3D = get_tree().get_first_node_in_group("player") as CharacterBody3D
 	if player == null:
 		_move_spread = move_toward(_move_spread, 0.0, 0.2)
