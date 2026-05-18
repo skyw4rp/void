@@ -26,6 +26,7 @@ Drop real `.ogg` files at the paths below to override placeholders automatically
 | `res://audio/combat/shotgun_fire.ogg` | Shotgun blast |
 | `res://audio/combat/bazooka_fire.ogg` | Bazooka launch |
 | `res://audio/combat/hit_shield.ogg` | Shield hit confirm |
+| `res://audio/combat/shield_break.ogg` | Shield depleted — energy rupture (one-shot per break) |
 | `res://audio/combat/hit_health.ogg` | Health hit confirm |
 | `res://audio/combat/hit_wall.ogg` | Cover / wall impact |
 | `res://audio/combat/fighter_hurt.ogg` | Fighter hurt layer |

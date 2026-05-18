@@ -72,6 +72,8 @@ static func _build_grid(template: ArenaTemplate, block_walls: bool) -> GridData:
 	for piece in template.floor_pieces:
 		_stamp_floor_rect(grid, piece.position, piece.size)
 	if block_walls:
+		for piece in template.structural_wall_pieces:
+			_stamp_wall_block(grid, piece.position, piece.size)
 		for piece in template.wall_pieces:
 			_stamp_wall_block(grid, piece.position, piece.size)
 	return grid

@@ -45,10 +45,20 @@ func _process(_delta: float) -> void:
 	var depth_t: float = GameBalance.void_fog_depth_t(sample_y)
 	_last_depth_t = depth_t
 
+	var edge_t: float = 0.0
+	if _player_camera:
+		edge_t = VoidAudio.compute_edge_proximity(_player_camera.global_position)
+
 	if not _falling and sample_y >= GameBalance.VOID_FOG_ARENA_CLEAR_Y:
 		if _last_depth_t > 0.001:
 			_restore_arena_atmosphere()
 		_last_depth_t = 0.0
+		VoidAudio.update_void_proximity(0.0, sample_y, false, edge_t)
+		CombatVfxDirector.apply_edge_tension(edge_t, false)
+		if edge_t > 0.02:
+			_apply_edge_fog_pulse(edge_t)
+		else:
+			_clear_edge_fog_pulse()
 		return
 
 	_apply_environment_sample(depth_t, sample_y)
@@ -61,10 +71,12 @@ func _process(_delta: float) -> void:
 	if _distant_arch and _distant_arch.has_method("apply_depth_fade"):
 		_distant_arch.call("apply_depth_fade", depth_t, sample_y)
 
-	var edge_t: float = 0.0
-	if _player_camera:
-		edge_t = VoidAudio.compute_edge_proximity(_player_camera.global_position)
 	VoidAudio.update_void_proximity(depth_t, sample_y, _falling, edge_t)
+	CombatVfxDirector.apply_edge_tension(edge_t, _falling)
+	if not _falling and edge_t > 0.02:
+		_apply_edge_fog_pulse(edge_t)
+	elif not _falling:
+		_clear_edge_fog_pulse()
 
 
 func get_last_depth_t() -> float:
@@ -134,6 +146,34 @@ func _apply_camera_fx(depth_t: float) -> void:
 	practical.dof_blur_far_enabled = depth_t > 0.2
 	practical.dof_blur_far_distance = lerpf(48.0, 1.6, depth_t)
 	practical.dof_blur_amount = lerpf(0.0, 0.72, depth_t)
+
+
+func _clear_edge_fog_pulse() -> void:
+	if _world_env == null or _saved_env == null:
+		return
+	var env: Environment = _world_env.environment
+	if env == null:
+		return
+	env.fog_density = _saved_env.fog_density
+	env.adjustment_enabled = _saved_env.adjustment_enabled
+	env.adjustment_saturation = _saved_env.adjustment_saturation
+
+
+func _apply_edge_fog_pulse(edge_t: float) -> void:
+	if _world_env == null or _saved_env == null:
+		return
+	var env: Environment = _world_env.environment
+	if env == null:
+		return
+	var director: Node = get_tree().get_first_node_in_group("combat_vfx_director")
+	var strength: float = 0.85
+	if director and "void_edge_strength" in director:
+		strength = float(director.void_edge_strength)
+	if director and "vfx_intensity" in director:
+		strength *= float(director.vfx_intensity)
+	env.fog_density = _saved_env.fog_density + edge_t * 0.0035 * strength
+	env.adjustment_enabled = edge_t > 0.08
+	env.adjustment_saturation = lerpf(_saved_env.adjustment_saturation, 0.78, edge_t * strength)
 
 
 func _restore_arena_atmosphere() -> void:

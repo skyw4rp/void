@@ -13,6 +13,8 @@ Design and production docs for the VOID project (Godot 4.6 prototype: **Neon Cat
 | [Visual Rules](art/VISUAL_RULES.md) | Do / don’t quick reference |
 | [Gameplay](gameplay/GAMEPLAY.md) | Loop, combat, void deaths |
 | [Prototype](PROTOTYPE.md) | Current build implementation detail |
+| [Codebase Map](CODEBASE_MAP.md) | **Systems, flows, dependencies, and risks** (navigation) |
+| [Technical Audit](TECHNICAL_AUDIT.md) | **Maintainability, bugs, coupling, refactor guidance** |
 
 ## Art & mood
 

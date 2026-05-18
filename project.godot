@@ -18,6 +18,7 @@ config/icon="res://icon.svg"
 [autoload]
 
 VoidAudio="*res://scripts/environment/void_audio.gd"
+CombatVfxDirector="*res://scripts/effects/combat_vfx_director.gd"
 
 [input]
 

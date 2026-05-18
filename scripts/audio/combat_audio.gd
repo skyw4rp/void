@@ -29,3 +29,11 @@ static func play_hit_confirm(
 
 static func play_wall_hit(world_position: Vector3, attacker_is_player: bool) -> void:
 	VoidAudio.play_wall_hit(world_position, attacker_is_player)
+
+
+static func play_shield_break(
+	world_position: Vector3,
+	is_local_player: bool,
+	player_caused: bool
+) -> void:
+	VoidAudio.play_shield_break(world_position, is_local_player, player_caused)

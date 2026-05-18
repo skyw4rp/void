@@ -98,6 +98,7 @@ static func _fire_railgun(
 					print("Railgun pierced: %s" % body_name)
 				else:
 					RailgunImpactFlash.spawn(scene_root, hit_pos, hit_normal, beam_emission)
+					PushHitResolver.spawn_wall_hit_vfx(hit_pos, dir, true)
 					print("Railgun pierced: %s" % body_name)
 
 			if collider is CollisionObject3D:

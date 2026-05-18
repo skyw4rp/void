@@ -143,6 +143,16 @@ static func play_wall_hit(world_position: Vector3, attacker_is_player: bool) -> 
 	)
 
 
+static func play_shield_break(
+	world_position: Vector3,
+	is_local_player: bool,
+	player_caused: bool
+) -> void:
+	if _instance == null:
+		return
+	_instance._play_shield_break_impl(world_position, is_local_player, player_caused)
+
+
 static func compute_edge_proximity(player_world: Vector3) -> float:
 	var tree: SceneTree = Engine.get_main_loop() as SceneTree
 	if tree == null:
@@ -282,6 +292,25 @@ func _play_weapon_fire_impl(
 	_play_at_3d(stream, world_position, vol + master_volume_db, pitch)
 
 
+func _play_shield_break_impl(
+	world_position: Vector3,
+	is_local_player: bool,
+	player_caused: bool
+) -> void:
+	var stream: AudioStream = AudioStreamFactory.shield_break()
+	if stream == null:
+		return
+	var vol: float = combat_volume_db + 2.0
+	if is_local_player:
+		vol += 1.5
+	elif not player_caused:
+		vol = enemy_combat_volume_db + 1.0
+	var pitch: float = _rng.randf_range(0.94, 1.02)
+	if is_local_player:
+		pitch *= _rng.randf_range(0.96, 1.0)
+	_play_at_3d(stream, world_position, vol + master_volume_db, pitch)
+
+
 func _play_hit_confirm_impl(
 	world_position: Vector3,
 	shield_before: int,
@@ -290,6 +319,9 @@ func _play_hit_confirm_impl(
 	health_after: int,
 	attacker_is_player: bool
 ) -> void:
+	if shield_before > 0 and shield_after <= 0:
+		return
+
 	var now: float = Time.get_ticks_msec() / 1000.0
 	if now - _last_hit_sound_time < HIT_SOUND_COOLDOWN_SEC:
 		return

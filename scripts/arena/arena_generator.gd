@@ -122,6 +122,19 @@ func generate_round_arena_async() -> bool:
 		_last_route_cells.clear()
 		_last_route_grid = null
 
+		var maze: Dictionary = ArenaMazeGenerator.apply(_template, template_id)
+		if not maze.get("passed", false):
+			print("Maze layout invalid, regenerating arena")
+			continue
+		print(
+			"Maze: %s (%d structural, %d routes)"
+			% [
+				maze.get("layout_name", "?"),
+				int(maze.get("structural_count", 0)),
+				int(maze.get("route_count", 0)),
+			]
+		)
+
 		var wall_set: Dictionary = ArenaWallSetGenerator.apply(
 			_template, template_id
 		)
@@ -154,6 +167,11 @@ func generate_round_arena_async() -> bool:
 	# Last resort: continuous monolith deck (Toxic Bridge template).
 	_template = ArenaTemplates.get_template(ArenaTemplates.Id.TOXIC_BRIDGE)
 	_route_path_world = PackedVector3Array()
+	var fallback_maze: Dictionary = ArenaMazeGenerator.apply(
+		_template, ArenaTemplates.Id.TOXIC_BRIDGE
+	)
+	if fallback_maze.get("passed", false):
+		print("Maze: %s (fallback)" % fallback_maze.get("layout_name", "?"))
 	var fallback_walls: Dictionary = ArenaWallSetGenerator.apply(
 		_template, ArenaTemplates.Id.TOXIC_BRIDGE
 	)

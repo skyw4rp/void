@@ -71,6 +71,7 @@ static func detonate(
 			shooter_body, origin, force, radius, explosion_damage, shooter
 		)
 
+	PushHitResolver.spawn_wall_hit_vfx(origin, Vector3.UP, true)
 	print("Explosion: %d target(s) pushed at %s (radius=%.1f)" % [pushed, origin, radius])
 
 

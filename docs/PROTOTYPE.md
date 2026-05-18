@@ -38,7 +38,7 @@ Shared backdrop (`VoidAtmosphere`, `VoidDistantArchitecture`) with **one procedu
 ### Audio (P0)
 
 **Autoload:** `VoidAudio` (`scripts/environment/void_audio.gd`) + `AudioStreamFactory` procedural placeholders.  
-**Combat hooks:** `CombatAudio` → weapon fire (player/enemy 3D), shield/health hit confirm, cover/wall thud, hurt layer on health damage.
+**Combat hooks:** `CombatAudio` → weapon fire (player/enemy 3D), shield/health hit confirm, **shield break** rupture, cover/wall thud, hurt layer on health damage. **`CombatFeedback`** — single trigger when shield **>0 → ≤0** (VFX + SFX + player camera/FOV + crosshair on enemy break).
 
 | Layer | Behavior |
 |-------|----------|
@@ -50,16 +50,45 @@ Shared backdrop (`VoidAtmosphere`, `VoidDistantArchitecture`) with **one procedu
 
 Replace placeholders: [audio/README_REPLACE_ASSETS.md](../audio/README_REPLACE_ASSETS.md).
 
+### Visual combat feedback (P1)
+
+**Autoload:** `CombatVfxDirector` (`scripts/effects/combat_vfx_director.gd`) — visual-only; does not change weapon stats, AI, movement, aim, FOV, or arena generation.
+
+| Tunable (autoload exports) | Role |
+|----------------------------|------|
+| `vfx_intensity` | Global scale |
+| `muzzle_flash_scale` | Weapon discharge read |
+| `shield_hit_scale` / `health_hit_scale` | Fighter impact read |
+| `void_edge_strength` | Perimeter tension (screen + fog) |
+| `enemy_vfx_multiplier` | Enemy muzzle (~**0.72×**) |
+
+**Hooks:** `WeaponManager` / `EnemyWeaponManager` → muzzle; `PushHitResolver` → shield/health/wall; `CombatStats.apply_damage` → `CombatFeedback.on_shield_broken` (once per transition); `ArenaUI` → stats label flash; `VoidGasController` → edge tension.
+
+**Shield break asset:** `res://audio/combat/shield_break.ogg` (procedural fallback in `AudioStreamFactory.shield_break()`).
+
+| Feedback | Read |
+|----------|------|
+| Railgun muzzle | Blue-white flash + micro particles + subtle view bloom |
+| Shotgun / bazooka | Warm flash + smoke / flame trail |
+| Shield hit | Cyan ring + crack particles |
+| Health hit | Dark red burst (stronger than shield) |
+| Shield break | Expanding cyan rings + radial shards + dedicated `shield_break` SFX; player screen pulse + camera impulse + FOV micro-pulse; crosshair flash on enemy break |
+| Wall / cover | Dust + optional metallic sparks |
+| Arena edge | Vignette + light desaturation + fog density bump (subtle) |
+
+VFX are procedural placeholders (meshes + `CPUParticles3D`); swap for authored scenes later without changing hook sites.
+
 ## ArenaGenerator (`scripts/arena/arena_generator.gd`)
 
 Each countdown:
 
 1. **Clear** previous floor (`ActiveArena` children), debris, projectiles, corpses, gibs.
 2. **Pick** a template from `ArenaTemplates` (won’t repeat the same name back-to-back).
-3. **Wall set** — `ArenaWallSetGenerator` replaces/varies inner `wall_pieces` (zones, archetypes, cover density); route must include a detour.
-4. **Build** one **continuous deck** + signature brutalist modules + procedural cover + **outer perimeter** (~70–80% protected) + **perimeter fall markers** (cracked edge, void glow).
-5. **Validate spawns** — floor raycast; per-body spawn height (player feet at floor, enemy capsule center +0.8); low-profile spawn pads.
-6. If invalid → regenerate (up to 6 attempts, then Toxic Bridge fallback).
+3. **Maze** — `ArenaMazeGenerator` places **indestructible** `StructuralWall_*` architecture (lanes, citadel, flank galleries, gate cross); validates spawn reachability, **≥2 routes**, minimum corridor width.
+4. **Wall set** — `ArenaWallSetGenerator` adds **destructible** tactical cover around the maze (zones, archetypes; ~82% density when maze present); route must still include a detour.
+5. **Build** one **continuous deck** + structural maze + signature modules + destructible cover + **outer perimeter** (~70–80% protected) + **perimeter fall markers** (cracked edge, void glow).
+6. **Validate spawns** — floor raycast; per-body spawn height (player feet at floor, enemy capsule center +0.8); low-profile spawn pads.
+7. If invalid → regenerate (up to 6 attempts, then Toxic Bridge fallback).
 7. Spawn **5–9** destructible cover pieces on **raycast-validated** floor points.
 8. Respawn fighters at validated transforms; pass `get_current_arena_bounds()` to AI.
 
@@ -75,9 +104,22 @@ Each countdown:
 | `RUINED_COURTYARD` | Ruined Courtyard | **25 × 25** | Corner columns, lateral slabs (spawn on Z axis) |
 | `HANGING_CORRIDORS` | Hanging Corridors | **23 × 27** | Side monoliths, end broken walls |
 
-`ArenaBrutalistModules` adds **visual-only corner pylons** for scale (no collision). Procedural `ArenaWallSetGenerator` adds flank cover (pillars, slabs, clusters) without carving floor holes.
+`ArenaBrutalistModules` adds **visual-only corner pylons** for scale (no collision).
+
+**Layout layers (inside → out):** continuous floor → **indestructible maze** (`structural_wall` / `structural_geometry`) → **destructible cover** (`destructible_wall`) → outer perimeter (destructible shell). Permanent walls define routes and combat pockets; destructible cover adds round-to-round variation without defining the whole layout.
 
 Each template: `spawn_safe_half`, perimeter `fall_zones[]`, `perimeter.ringout_open_sides`, `void_y` (**-32**).
+
+### Indestructible maze (`scripts/arena/arena_maze_generator.gd`)
+
+| Profile | Shape |
+|---------|--------|
+| `ThreeLaneHub` | Central spine + flank dividers + corner monoliths + L-wing pocket |
+| `CenterCitadel` | Square ring with cardinal gates + offset monolith |
+| `FlankGalleries` | Long flank walls with gate breaks + cross pocket bar |
+| `GateCross` | Perpendicular arms with center hub + quarter slabs |
+
+`StructuralWall` — collision, no HP, not in `destructible_wall`; blocks projectiles and movement; counts for AI LOS (`arena_wall`). Maze validation: BFS spawn-to-spawn, detour route, **≥2 cell** corridor width on primary path interior.
 
 ### Outer perimeter (`scripts/arena/arena_perimeter_builder.gd`)
 
@@ -85,7 +127,8 @@ Each template: `spawn_safe_half`, perimeter `fall_zones[]`, `perimeter.ringout_o
 - Piece types: full ruined wall, half wall, collapsed, cracked pillar, hanging panel
 - **Decor-only** corner towers and distant breakwall silhouettes (no collision)
 - All walls/barriers/pillars/slabs/perimeter pieces use **`DestructibleWall`** (`destructible_wall` group) — named `DestructibleWall_Full`, `_Half`, `_Outer`, `_Pillar`, `_ThinSlab`. Anonymous `@StaticBody3D@*` names are **not allowed** for wall-like geometry.
-- Only **`StructuralFloor_*`** and **`StructuralConnector_*`** (`structural_geometry` group) are non-destructible floors/bridges.
+- **`StructuralFloor_*`** / **`StructuralConnector_*`** — non-destructible floors (`structural_geometry`).
+- **`StructuralWall_*`** — non-destructible maze architecture (`structural_wall` + `arena_wall` + `structural_geometry`); no `damage_cover`, no fracture.
 - Groups: `arena_wall`, `arena_perimeter` (AI cover), `arena_perimeter_decor` (visual only, no collision)
 
 ### Destructible arena walls (`scripts/arena/destructible_wall.gd`)

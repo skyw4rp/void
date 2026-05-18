@@ -160,13 +160,8 @@ func apply_damage(amount: int, attacker: Node = null) -> void:
 			health = 0
 
 	if shield_before > 0 and shield <= 0:
-		match last_damage_source:
-			"railgun":
-				print("Shield broken by Railgun")
-			"bazooka_direct":
-				print("Shield broken by Bazooka direct hit")
-		if last_damage_source == "railgun" or last_damage_source == "bazooka_direct":
-			shield_broken.emit(last_damage_source)
+		shield_broken.emit(last_damage_source)
+		CombatFeedback.on_shield_broken(self)
 
 	_log_stats()
 	stats_changed.emit(shield, health)

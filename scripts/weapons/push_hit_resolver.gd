@@ -35,7 +35,7 @@ static func is_anonymous_static(body: Node) -> bool:
 	var target: Node = resolve_hit_body(body)
 	if target == null or not target is StaticBody3D:
 		return false
-	if target is DestructibleWall or target is StructuralFloor:
+	if target is DestructibleWall or target is StructuralFloor or target is StructuralWall:
 		return false
 	var node_name: String = target.name
 	return node_name.begins_with("@") or node_name == "StaticBody3D"
@@ -226,6 +226,7 @@ static func apply_damage_to_target(
 		if cover_pos.length_squared() < 0.001 and body is Node3D:
 			cover_pos = (body as Node3D).global_position
 		CombatAudio.play_wall_hit(cover_pos, _is_player_attacker(attacker))
+		spawn_wall_hit_vfx(cover_pos, direction, is_destructible_wall(body))
 		return
 	var stats: CombatStats = body.get_node_or_null("CombatStats") as CombatStats
 	if stats:
@@ -251,6 +252,12 @@ static func apply_damage_to_target(
 				stats.health,
 				_is_player_attacker(attacker)
 			)
+		var vfx_pos: Vector3 = hit_pos_audio
+		if vfx_pos.length_squared() > 1e8 and body is Node3D:
+			vfx_pos = (body as Node3D).global_position
+		spawn_fighter_hit_vfx(
+			vfx_pos, direction, shield_before, stats.shield, health_before, stats.health
+		)
 		if _is_player_attacker(attacker) and body.is_in_group("arena_opponent"):
 			Crosshair.notify_player_damage_to(
 				body.get_tree(), body, shield_before, health_before
@@ -259,6 +266,47 @@ static func apply_damage_to_target(
 	if body.has_method("take_damage"):
 		body.call("take_damage", amount, attacker, direction, force, source)
 		return
+
+
+static func spawn_fighter_hit_vfx(
+	world_position: Vector3,
+	hit_direction: Vector3,
+	shield_before: int,
+	shield_after: int,
+	health_before: int,
+	health_after: int
+) -> void:
+	CombatVfxDirector.spawn_fighter_hit(
+		world_position,
+		Vector3.ZERO,
+		shield_before,
+		shield_after,
+		health_before,
+		health_after,
+		hit_direction
+	)
+
+
+static func spawn_wall_hit_vfx(
+	world_position: Vector3,
+	hit_direction: Vector3,
+	metallic: bool = true
+) -> void:
+	var normal: Vector3 = Vector3.UP
+	if hit_direction.length_squared() > 0.0001:
+		normal = (-hit_direction).normalized()
+	CombatVfxDirector.spawn_wall_hit(world_position, normal, metallic)
+
+
+static func should_spawn_wall_hit_vfx(body: Node) -> bool:
+	body = resolve_hit_body(body)
+	if body == null:
+		return false
+	if is_combat_fighter(body):
+		return false
+	if body is RigidBody3D:
+		return false
+	return body is StaticBody3D or is_destructible_wall(body) or is_structural_geometry(body)
 
 
 static func _is_player_attacker(attacker: Node) -> bool:

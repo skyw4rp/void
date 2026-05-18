@@ -28,6 +28,8 @@ const LOOK_PITCH_MAX: float = 1.4
 @export var speed_fov_ground_extra: float = 0.4
 @export var landing_shake_strength: float = 0.14
 @export var weapon_fov_pulse: float = 1.25
+@export var shield_break_fov_pulse: float = 0.9
+@export var shield_break_camera_impulse: float = 0.48
 
 @export_group("Dodge")
 @export var dodge_distance: float = 2.05
@@ -593,6 +595,13 @@ func _setup_aim_camera_hierarchy() -> void:
 
 func notify_weapon_fov_pulse() -> void:
 	_fov.trigger_weapon_pulse(weapon_fov_pulse)
+
+
+func notify_shield_broken() -> void:
+	_fov.trigger_weapon_pulse(shield_break_fov_pulse)
+	_fov.add_impact(0.38)
+	if _camera_feel_pivot:
+		_camera_feel.apply_impulse_shake(_camera_feel_pivot, shield_break_camera_impulse)
 
 
 func _bind_game_flow() -> void:

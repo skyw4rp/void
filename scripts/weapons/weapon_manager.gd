@@ -87,6 +87,7 @@ func try_fire() -> bool:
 	if _current == WeaponDefs.Id.RAILGUN:
 		print("Railgun")
 	CombatAudio.play_weapon_fire(_current, origin + base_dir * 0.35, false)
+	CombatVfxDirector.spawn_muzzle_fire(_current, origin, base_dir, false)
 	var player: Node = get_tree().get_first_node_in_group("player")
 	if player and player.has_method("notify_weapon_fov_pulse"):
 		player.call("notify_weapon_fov_pulse")

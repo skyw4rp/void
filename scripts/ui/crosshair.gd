@@ -159,8 +159,8 @@ func notify_hit_on_target(shield_damage: int, health_damage: int, killed: bool) 
 
 
 func notify_enemy_shield_broken() -> void:
-	_hit_flash = 1.35
-	_hit_color = COLOR_SHIELD_HIT
+	_hit_flash = 1.55
+	_hit_color = Color(0.45, 0.95, 1.0, 1.0)
 	queue_redraw()
 
 
@@ -188,11 +188,6 @@ static func notify_player_damage_to(
 		return
 	var shield_dmg: int = maxi(0, shield_before - stats.shield)
 	var health_dmg: int = maxi(0, health_before - stats.health)
-	if shield_before > 0 and stats.shield <= 0:
-		var src: String = stats.last_damage_source
-		if src == "railgun" or src == "bazooka_direct":
-			if cross.has_method("notify_enemy_shield_broken"):
-				cross.call("notify_enemy_shield_broken")
 	cross.call("notify_hit_on_target", shield_dmg, health_dmg, stats.is_dead())
 
 

@@ -67,6 +67,8 @@ func _on_body_entered(body: Node3D) -> void:
 		_despawn()
 		return
 
+	if PushHitResolver.should_spawn_wall_hit_vfx(body):
+		PushHitResolver.spawn_wall_hit_vfx(global_position, _direction, true)
 	print("Projectile: hit '%s' — destroyed" % body.name)
 	_despawn()
 

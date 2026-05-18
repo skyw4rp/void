@@ -94,6 +94,7 @@ func try_fire(origin: Vector3, direction: Vector3, aim_basis: Basis) -> bool:
 	)
 	print("Enemy fired %s" % WeaponDefs.get_weapon_name(_current))
 	CombatAudio.play_weapon_fire(_current, fire_origin, true)
+	CombatVfxDirector.spawn_muzzle_fire(_current, fire_origin, fire_dir, true)
 	shot_fired.emit(get_weapon_name())
 	var mount: Node = get_parent()
 	if mount and mount.has_method("notify_weapon_synced"):

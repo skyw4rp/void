@@ -14,6 +14,13 @@ class WallPiece:
 	var position: Vector3 = Vector3.ZERO  ## Wall center in arena-local space.
 
 
+## Indestructible brutalist architecture — maze routes, collision, no HP.
+class StructuralWallPiece:
+	var size: Vector3 = Vector3(2.0, 4.0, 0.6)
+	var position: Vector3 = Vector3.ZERO
+	var kind: int = 0  ## StructuralWall.Kind
+
+
 class AiBounds:
 	var safe_half_x: float = 3.0
 	var danger_half_x: float = 3.8
@@ -44,6 +51,7 @@ var arena_name: String = "Arena"
 var center_position: Vector3 = Vector3.ZERO
 var floor_pieces: Array[FloorPiece] = []
 var wall_pieces: Array[WallPiece] = []
+var structural_wall_pieces: Array[StructuralWallPiece] = []
 var player_spawn_local: Vector3 = Vector3(0.0, 1.0, 5.0)
 var enemy_spawn_local: Vector3 = Vector3(0.0, 1.0, -5.0)
 var debris_bounds: Dictionary = {
@@ -79,6 +87,18 @@ static func make_wall(size: Vector3, center: Vector3) -> WallPiece:
 	var piece := WallPiece.new()
 	piece.size = size
 	piece.position = center
+	return piece
+
+
+static func make_structural_wall(
+	size: Vector3,
+	center: Vector3,
+	kind: int = 0
+) -> StructuralWallPiece:
+	var piece := StructuralWallPiece.new()
+	piece.size = size
+	piece.position = center
+	piece.kind = kind
 	return piece
 
 

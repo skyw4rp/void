@@ -12,6 +12,11 @@ extends CanvasLayer
 @onready var _void_gas_vignette: ColorRect = $VoidGasVignette
 @onready var _void_gas_tint: ColorRect = $VoidGasTint
 
+var _edge_tension_vignette: ColorRect
+var _edge_tension_tint: ColorRect
+var _combat_bloom_flash: ColorRect
+var _edge_smoothed: float = 0.0
+
 
 func _ready() -> void:
 	add_to_group("arena_ui")
@@ -44,6 +49,7 @@ func _ready() -> void:
 		_on_weapon_changed(weapon_manager.get_weapon_name())
 
 	call_deferred("_bind_combat_stats")
+	call_deferred("_ensure_combat_overlays")
 
 
 func _bind_combat_stats() -> void:
@@ -90,14 +96,12 @@ func _update_enemy_stats(health: int, shield: int) -> void:
 	_enemy_stats_label.text = "Enemy HP: %d | Shield: %d" % [health, shield]
 
 
-func _on_player_shield_broken(source: String) -> void:
-	if source == "railgun" or source == "bazooka_direct":
-		_flash_stats_label(_player_stats_label, Color(0.35, 0.92, 1.0))
+func _on_player_shield_broken(_source: String) -> void:
+	_flash_stats_label(_player_stats_label, Color(0.35, 0.92, 1.0))
 
 
-func _on_enemy_shield_broken(source: String) -> void:
-	if source == "railgun" or source == "bazooka_direct":
-		_flash_stats_label(_enemy_stats_label, Color(0.35, 0.92, 1.0))
+func _on_enemy_shield_broken(_source: String) -> void:
+	_flash_stats_label(_enemy_stats_label, Color(0.35, 0.92, 1.0))
 
 
 func _flash_stats_label(label: Label, flash_color: Color) -> void:
@@ -149,6 +153,67 @@ func apply_void_gas_screen(depth_t: float, falling: bool) -> void:
 			_void_gas_tint.color = gas
 	if active and _void_overlay.visible:
 		_void_overlay.color.a = lerpf(0.38, 0.78, depth_t)
+	if active and _edge_tension_vignette:
+		_edge_smoothed = 0.0
+		_edge_tension_vignette.visible = false
+	if active and _edge_tension_tint:
+		_edge_tension_tint.visible = false
+
+
+func apply_edge_tension(edge_t: float, void_falling: bool, strength: float = 0.85) -> void:
+	if _edge_tension_vignette == null:
+		return
+	if void_falling:
+		_edge_smoothed = lerpf(_edge_smoothed, 0.0, 0.2)
+	else:
+		_edge_smoothed = lerpf(_edge_smoothed, clampf(edge_t, 0.0, 1.0), 0.14)
+	var t: float = _edge_smoothed * strength
+	var active: bool = t > 0.03 and not void_falling
+	_edge_tension_vignette.visible = active
+	_edge_tension_tint.visible = active
+	if not active:
+		return
+	_edge_tension_vignette.color = Color(0.02, 0.05, 0.06, lerpf(0.0, 0.2, t))
+	var tint := Color(0.06, 0.1, 0.09, lerpf(0.0, 0.14, t))
+	tint = tint.lerp(Color(0.12, 0.1, 0.1, tint.a), t * 0.35)
+	_edge_tension_tint.color = tint
+
+
+func trigger_combat_view_flash(color: Color, alpha: float, duration: float) -> void:
+	if _combat_bloom_flash == null or alpha <= 0.001:
+		return
+	_combat_bloom_flash.visible = true
+	_combat_bloom_flash.color = Color(color.r, color.g, color.b, alpha)
+	var tween := create_tween()
+	tween.tween_property(_combat_bloom_flash, "color:a", 0.0, duration)
+	tween.tween_callback(func() -> void:
+		if is_instance_valid(_combat_bloom_flash):
+			_combat_bloom_flash.visible = false
+	)
+
+
+func _ensure_combat_overlays() -> void:
+	if _combat_bloom_flash == null:
+		_combat_bloom_flash = _make_fullscreen_overlay("CombatBloomFlash", 90)
+	if _edge_tension_vignette == null:
+		_edge_tension_vignette = _make_fullscreen_overlay("EdgeTensionVignette", 85)
+	if _edge_tension_tint == null:
+		_edge_tension_tint = _make_fullscreen_overlay("EdgeTensionTint", 86)
+	_edge_tension_vignette.visible = false
+	_edge_tension_tint.visible = false
+	_combat_bloom_flash.visible = false
+
+
+func _make_fullscreen_overlay(node_name: String, z_index: int) -> ColorRect:
+	var rect := ColorRect.new()
+	rect.name = node_name
+	rect.set_anchors_preset(Control.PRESET_FULL_RECT)
+	rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	rect.z_index = z_index
+	rect.visible = false
+	rect.color = Color(1, 1, 1, 0)
+	add_child(rect)
+	return rect
 
 
 func _on_match_over(player_won: bool) -> void:

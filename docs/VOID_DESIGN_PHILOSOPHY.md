@@ -63,6 +63,8 @@ Strong silhouettes, forward-projecting weapons, clear torso orientation.
 
 Architecture **dominates** the player: brutalist scale, fractured repetition, vertical shafts, endless bridges, negative space.
 
+Procedural arenas use a **continuous deck** with **indestructible maze walls** that define lanes, pockets, and flank routes; **destructible cover** only adds temporary combat variation around that skeleton — never the whole layout.
+
 The void is **infinite, silent, indifferent, hungry** — large emptiness and distance are intentional.
 
 **Reject:** clean surfaces, saturated palette, decorative darkness without depth.

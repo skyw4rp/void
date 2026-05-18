@@ -4,6 +4,7 @@ extends RefCounted
 
 const FLOOR_GROUP: String = "arena_floor"
 const WALL_GROUP: String = "arena_wall"
+const STRUCTURAL_WALL_GROUP: String = "structural_wall"
 
 
 static func build(parent: Node3D, template: ArenaTemplate) -> void:
@@ -16,6 +17,14 @@ static func build(parent: Node3D, template: ArenaTemplate) -> void:
 	wall_mat.albedo_color = template.wall_albedo
 	wall_mat.roughness = 0.9
 	wall_mat.metallic = 0.22
+
+	var structural_mat := StandardMaterial3D.new()
+	structural_mat.albedo_color = template.wall_albedo.lerp(Color(0.04, 0.045, 0.05), 0.25)
+	structural_mat.roughness = 0.94
+	structural_mat.metallic = 0.28
+	structural_mat.emission_enabled = true
+	structural_mat.emission = Color(0.05, 0.07, 0.09)
+	structural_mat.emission_energy_multiplier = 0.22
 
 	var arena_slug: String = _arena_slug(template.arena_name)
 	var floor_index: int = 0
@@ -34,6 +43,17 @@ static func build(parent: Node3D, template: ArenaTemplate) -> void:
 			floor_mat,
 			node_name,
 			piece.is_connector
+		)
+
+	var structural_index: int = 0
+	for piece in template.structural_wall_pieces:
+		structural_index += 1
+		_add_structural_wall(
+			parent,
+			template.center_position,
+			piece,
+			structural_mat,
+			"%03d" % structural_index
 		)
 
 	var wall_index: int = 0
@@ -116,6 +136,35 @@ static func _add_destructible_wall(
 	parent.add_child(wall)
 	wall.global_position = arena_center + local_center
 	wall.setup_wall(kind, mesh_inst, size, false, name_suffix)
+
+
+static func _add_structural_wall(
+	parent: Node3D,
+	arena_center: Vector3,
+	piece: ArenaTemplate.StructuralWallPiece,
+	mat: StandardMaterial3D,
+	name_suffix: String
+) -> void:
+	var wall := StructuralWall.new()
+	wall.collision_layer = 1
+	wall.collision_mask = 1
+
+	var mesh_inst := MeshInstance3D.new()
+	var box_mesh := BoxMesh.new()
+	box_mesh.size = piece.size
+	mesh_inst.mesh = box_mesh
+	mesh_inst.material_override = mat
+
+	var col := CollisionShape3D.new()
+	var box_shape := BoxShape3D.new()
+	box_shape.size = piece.size
+	col.shape = box_shape
+
+	wall.add_child(mesh_inst)
+	wall.add_child(col)
+	parent.add_child(wall)
+	wall.global_position = arena_center + piece.position
+	wall.setup_structural_wall(piece.kind as StructuralWall.Kind, mesh_inst, piece.size, name_suffix)
 
 
 static func _arena_slug(arena_name: String) -> String:

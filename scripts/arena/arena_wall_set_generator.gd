@@ -134,9 +134,11 @@ static func _generate_for_profile(
 	var min_walls: int = int(recipe.get("min_walls", 3))
 	var max_walls: int = int(recipe.get("max_walls", 9))
 	var target: int = int(round(lerpf(float(min_walls), float(max_walls), cover_density)))
+	if not template.structural_wall_pieces.is_empty():
+		target = int(round(float(target) * 0.82))
 	target = maxi(target - template.wall_pieces.size(), 0)
 
-	var grid: ArenaRouteValidator.GridData = ArenaRouteValidator._build_grid(template, false)
+	var grid: ArenaRouteValidator.GridData = ArenaRouteValidator._build_grid(template, true)
 	var candidates: Array[Vector2i] = _collect_candidate_cells(template, grid, safe)
 
 	var placed: int = 0
@@ -217,7 +219,7 @@ static func _collect_candidate_cells(
 			var local: Vector2 = ArenaRouteValidator._cell_to_local(cell)
 			if absf(local.x) > safe.x * 0.88 or absf(local.y) > safe.y * 0.88:
 				continue
-			if _cell_near_spawn(cell, spawn_p, 4) or _cell_near_spawn(cell, spawn_e, 4):
+			if _cell_near_spawn(cell, spawn_p, 5) or _cell_near_spawn(cell, spawn_e, 5):
 				continue
 			out.append(cell)
 	return out
@@ -330,6 +332,9 @@ static func _build_archetype(
 
 
 static func _overlaps_existing(template: ArenaTemplate, piece: ArenaTemplate.WallPiece) -> bool:
+	for other in template.structural_wall_pieces:
+		if _aabb_overlap(piece.position, piece.size, other.position, other.size):
+			return true
 	for other in template.wall_pieces:
 		if _aabb_overlap(piece.position, piece.size, other.position, other.size):
 			return true

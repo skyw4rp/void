@@ -72,11 +72,11 @@ Audit date: prototype state with arena 1v1, `GladiatorLocomotion`, `WeaponMount`
 
 | | |
 |---|---|
-| **Current state** | **Continuous monolith decks** (~**21×18** to **23×22** danger half-extents); **no interior floor holes**. Void ring-out via exterior `danger_half_*`, perimeter openings, fall-zone VFX, void fog/audio. Signature columns/slabs + `ArenaBrutalistModules` corner pylons + procedural flank cover. Spawn/debris raycasts on solid deck. |
-| **Gap** | Still a single horizontal slab (no vertical shafts/cathedrals); procedural wall regen can still log retries on dense layouts; corner pylons are visual-only. |
-| **Concrete fix** | Vertical void vistas (visual), template-specific distant arch scale-up, stronger deck-edge crack read at sprint speed; optional rare elevated catwalk only with route validation. |
+| **Current state** | **Continuous monolith decks** (~**21×18** to **23×22** danger half-extents); **no interior floor holes**. Void ring-out via exterior `danger_half_*` only. **Indestructible maze** (`ArenaMazeGenerator` + `StructuralWall`) — 4 layout profiles, lane/gate validation (≥2 routes, min corridor width, spawn clearance). Destructible cover secondary (`ArenaWallSetGenerator`, reduced density when maze present). `ArenaBrutalistModules` corner pylons (visual). Spawn/debris raycasts on solid deck. |
+| **Gap** | Still a single horizontal slab (no vertical shafts/cathedrals); rare maze regen retries on dense layouts; corner pylons visual-only. |
+| **Concrete fix** | Vertical void vistas (visual), template-specific distant arch scale-up, stronger deck-edge crack read at sprint speed; optional rare elevated catwalk with route validation. |
 | **Priority** | **P2** (vertical megastructure); **P1** (edge read at speed) |
-| **Files** | `scripts/arena/arena_templates.gd`, `scripts/arena/arena_brutalist_modules.gd`, `scripts/arena/arena_structure_builder.gd`, `scripts/arena/arena_wall_set_generator.gd`, `scripts/arena/arena_perimeter_builder.gd` |
+| **Files** | `scripts/arena/arena_maze_generator.gd`, `scripts/arena/structural_wall.gd`, `scripts/arena/arena_templates.gd`, `scripts/arena/arena_structure_builder.gd`, `scripts/arena/arena_route_validator.gd`, `scripts/arena/arena_wall_set_generator.gd`, `scripts/arena/arena_generator.gd` |
 
 ---
 
@@ -85,10 +85,10 @@ Audit date: prototype state with arena 1v1, `GladiatorLocomotion`, `WeaponMount`
 | | |
 |---|---|
 | **Current state** | Ring-out **Y -20**; death **Y -32**; `VoidGasController` fog/vignette/DOF; layered `VoidAtmosphere`; observers; void fall cinematic (`VOID_GORE`), instability, FOV widen; distant flashes. **P0 audio:** `VoidAudio` autoload — drone loop, proximity bed (depth + arena edge), danger pulses, fall rush, void one-shots (procedural or `res://audio/void/*`). |
-| **Gap** | Placeholder tones/noise — replace with designed assets ([audio/README_REPLACE_ASSETS.md](../audio/README_REPLACE_ASSETS.md)). Pre-fall edge warning could be stronger visually (peripheral desaturate). Bottom still partially “layered fog” not always “infinite.” |
-| **Concrete fix** | Swap procedural void assets; optional dedicated `Void` audio bus; boost downward particle density in fall. Keep intentional silence beats in `VOID_GORE`. |
-| **Priority** | **P1** (asset quality + edge visual tension) |
-| **Files** | `audio/void/*`, `scripts/environment/void_audio.gd`, `scripts/audio/audio_stream_factory.gd` |
+| **Gap** | Placeholder tones/noise — replace with designed assets ([audio/README_REPLACE_ASSETS.md](../audio/README_REPLACE_ASSETS.md)). Edge tension now has subtle vignette/desaturation/fog pulse (`CombatVfxDirector` + `VoidGasController`) but optional particle drift not added. Bottom still partially “layered fog” not always “infinite.” |
+| **Concrete fix** | Swap procedural void assets; optional dedicated `Void` audio bus; boost downward particle density in fall; optional edge drift particles. Keep intentional silence beats in `VOID_GORE`. |
+| **Priority** | **P1** (asset quality); ~~edge visual tension~~ **partial (P1 screen/fog)** |
+| **Files** | `audio/void/*`, `scripts/environment/void_audio.gd`, `scripts/audio/audio_stream_factory.gd`, `scripts/effects/combat_vfx_director.gd`, `scripts/arena_ui.gd` |
 
 ---
 
@@ -96,11 +96,11 @@ Audit date: prototype state with arena 1v1, `GladiatorLocomotion`, `WeaponMount`
 
 | | |
 |---|---|
-| **Current state** | **P0 wired:** `CombatAudio` hooks — per-weapon fire (player + enemy 3D), shield/health hit confirm, wall/cover thud, fighter hurt layer on health damage. Void gore timeline still uses `VoidAudio` static API. Procedural placeholders until OGG drops in `res://audio/combat/`. |
-| **Gap** | Hit confirm still light on **VFX** (flash/tracer). No dedicated audio buses. Landing/dodge mostly visual. Rail multi-hit may feel busy at high pierce (cooldown **45 ms**). |
-| **Concrete fix** | Brief muzzle/impact VFX; `Void` / `Combat` buses; tune `VoidAudio` export volumes; optional rail hit throttle. |
-| **Priority** | **P1** (hit VFX + mix buses) |
-| **Files** | `scripts/audio/combat_audio.gd`, `scripts/weapons/push_hit_resolver.gd`, `scripts/weapons/weapon_manager.gd`, `scripts/enemies/enemy_weapon_manager.gd`, `audio/combat/*` |
+| **Current state** | **P0 audio wired:** `CombatAudio` — weapon fire, shield/health hit, wall thud, hurt layer. **Shield break (dedicated):** `CombatFeedback` on `CombatStats` when shield **>0 → ≤0** (all weapons, once per break) — `AudioStreamFactory.shield_break()` / `res://audio/combat/shield_break.ogg`, expanding ring VFX, player screen pulse + camera impulse + FOV micro-pulse, enemy world burst + crosshair. Generic shield *hit* SFX suppressed on the break frame. **P1 combat VFX:** muzzle, shield/health/wall hits, arena-edge tension. Procedural placeholders until authored assets. |
+| **Gap** | No dedicated audio buses. Landing/dodge mostly visual-only. Rail multi-hit may feel busy at high pierce (cooldown **45 ms**). Edge particle drift optional / not yet added. |
+| **Concrete fix** | `Void` / `Combat` buses; tune `VoidAudio` export volumes; optional rail hit throttle; swap procedural VFX for authored one-shots. |
+| **Priority** | **P1** (mix buses + asset polish); ~~hit VFX~~ **Done (procedural P1)** |
+| **Files** | `scripts/audio/combat_feedback.gd`, `scripts/combat_stats.gd`, `scripts/effects/combat_vfx_director.gd`, `scripts/environment/void_audio.gd`, `scripts/audio/audio_stream_factory.gd`, `scripts/player.gd`, `scripts/ui/crosshair.gd`, `audio/combat/shield_break.ogg` |
 
 ---
 
@@ -109,7 +109,7 @@ Audit date: prototype state with arena 1v1, `GladiatorLocomotion`, `WeaponMount`
 | Priority | Items |
 |----------|--------|
 | **P0** | ~~Real void + combat audio~~ **Done (procedural P0)** — replace with authored OGG |
-| **P1** | Movement snap tune, camera shake discipline, enemy silhouette/emissive, enemy fire VFX, deck lighting contrast, hit VFX, audio buses, void asset swap |
+| **P1** | Movement snap tune, camera shake discipline, enemy silhouette/emissive, deck lighting contrast, ~~hit/muzzle VFX~~ **Done (procedural)**, audio buses, void asset swap |
 | **P2** | Megastructure-scale arena variants, vertical void vistas, template-specific distant arch |
 
 ---
@@ -122,6 +122,8 @@ Audit date: prototype state with arena 1v1, `GladiatorLocomotion`, `WeaponMount`
 - Art docs (`docs/art/ART_DIRECTION.md`) already encode perceptual horror
 - Fast 1v1 kinetic loop — not cover-based
 - Continuous arena floor + perimeter-only void fall (fairness + combat readability)
+- Indestructible maze defines traversal; destructible cover adds tactical variation
+- Combat VFX: readable muzzle direction, shield vs health hit language, **shield break state transition**, perimeter edge tension
 
 ---
 

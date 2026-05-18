@@ -1,0 +1,127 @@
+---
+description: VOID code safety — no hidden gameplay changes; architecture, hooks, post-change report
+alwaysApply: true
+---
+
+# VOID code safety
+
+**Purpose:** Preserve architecture clarity and prevent accidental gameplay changes during AI edits.
+
+**Companion rules/docs:** `void-design.mdc` (feel gate) · `docs/CODEBASE_MAP.md` · `docs/TECHNICAL_AUDIT.md` · `docs/VOID_DESIGN_PHILOSOPHY.md`
+
+---
+
+## Forbidden without explicit user request
+
+Do **not** change unless the user clearly asks for that category:
+
+| Category | Examples |
+|----------|----------|
+| **Damage / shield / health** | `CombatStats.apply_damage`, `WeaponDefs` damage, shield HP, damage order |
+| **Movement** | `GladiatorLocomotion`, dodge, friction, max speed, jump, knockback caps |
+| **Weapon balance** | Cooldowns, spread, pierce, explosion radius, wall damage |
+| **AI behavior** | `ArenaOpponent` states, fire intervals, cover/edge logic, weapon choice |
+| **Arena generation** | Templates, maze profiles, route rules, spawn positions, void margins |
+
+Visual-only, audio mix, docs, and debug tooling are allowed when they do not alter the above.
+
+---
+
+## Architecture discipline
+
+- **Small modules over hidden logic** — prefer new focused scripts (`RefCounted` / small `Node`) over growing god files (`arena_opponent.gd`, `push_hit_resolver.gd`, `player.gd`).
+- **Document ownership** — new systems need: purpose, main file, who calls it, signals/autoloads used (update `docs/CODEBASE_MAP.md` when adding a subsystem).
+- **No duplicate state** — one source of truth per fact (e.g. shield value only on `CombatStats`; round score only on `GameManager`).
+- **Coordinated writes** — if multiple systems touch the same property, use a single owner + signals or one entry API (pattern: `CombatFeedback.on_shield_broken`).
+
+### Single owners (do not split casually)
+
+| Domain | Owner | Others may |
+|--------|--------|------------|
+| **Aim / pitch** | `Player` → `AimPivot` | Read via `get_aim_global_transform()` |
+| **Camera roll / offset** | `GladiatorCameraFeel` on `CameraFeelPivot` | Never drive pitch from here |
+| **FOV (final)** | `GladiatorFov` → applied in `player._process` | Offsets only via `add_impact`, `set_void_offset`, `trigger_weapon_pulse` |
+| **Combat damage** | `PushHitResolver` → `CombatStats` | Audio/VFX via hooks after damage |
+| **Round / score** | `GameManager` | UI listens to signals only |
+| **Arena layout data** | `ArenaTemplate` + generators | `ArenaStructureBuilder` builds only |
+
+---
+
+## Domain guardrails
+
+### Camera / FOV / aim
+
+- One pipeline to final camera output: **yaw on body → pitch on AimPivot → feel on CameraFeelPivot → Camera3D**.
+- Do not add second FOV writers or smooth mouse look without user request.
+- Weapon fire must use stabilized aim APIs (`get_aim_global_transform`), not viewmodel bob.
+
+### Audio / VFX
+
+- Hook through `CombatAudio`, `VoidAudio`, `CombatVfxDirector`, `CombatFeedback` — not ad-hoc nodes in unrelated scripts.
+- Procedural / missing assets must **fail safe** (`AudioStreamFactory.try_load_asset`, null checks on autoload `_instance`).
+- Do not spawn duplicate feedback for the same event (e.g. shield break only via `CombatFeedback` + `shield_broken` once).
+
+### Arena generation
+
+- Any layout change must keep: **continuous floor**, **exterior-only void fall**, **spawn clearance**, **≥2 routes** when maze/cover runs.
+- Run validation via `ArenaRouteValidator`; do not skip spawn raycasts.
+- Structural walls (`StructuralWall`) ≠ destructible cover (`DestructibleWall`) — do not merge groups.
+
+### Damage / shield / death
+
+- Shield break: trigger only on transition **shield > 0 → shield ≤ 0**, once per `apply_damage` (see `CombatStats`).
+- Respect combat phase: prefer guarding at `PushHitResolver.apply_damage_to_target` / `GameManager.is_fighting()` (see `docs/TECHNICAL_AUDIT.md` T-001).
+- Death scoring only through `GameManager` (`on_health_death`, void finish paths) — do not increment score elsewhere.
+
+---
+
+## Implementation checklist (before finishing)
+
+- [ ] Listed **every file changed** (no drive-by edits).
+- [ ] Confirmed no forbidden category changed unless requested.
+- [ ] New hooks documented; no duplicate listeners without `CONNECT_ONE_SHOT` or disconnect guard.
+- [ ] Autoload / group names unchanged unless requested (`VoidAudio`, `CombatVfxDirector`, `game_manager`, `player`, `arena_opponent`).
+
+---
+
+## Required post-implementation report
+
+After **every** code change, end the response with:
+
+### Files changed
+- Bullet list of paths touched (created / modified / deleted).
+
+### What changed
+- Brief factual summary of behavior or structure.
+
+### What did not change
+- Explicit callout of untouched systems (e.g. "weapon stats, AI states, arena templates unchanged").
+
+### How to test
+- Numbered steps to verify in Godot (F5): happy path + regression checks relevant to the diff.
+- If gameplay-adjacent: test countdown, fight, one weapon, shield break, one death type as applicable.
+
+### Known risks
+- Residual coupling, edge cases, or follow-ups (link `TECHNICAL_AUDIT` IDs if relevant).
+
+---
+
+## When gameplay *did* change
+
+If the user requested a balance or behavior change:
+
+1. State **what** changed and **why** (user request).
+2. Provide **before/after** expectation in one sentence.
+3. Expand **How to test** with acceptance criteria (measurable: damage numbers, timing, AI distance, etc.).
+
+---
+
+## Prefer / avoid
+
+| Prefer | Avoid |
+|--------|--------|
+| `GameBalance` / export tunables | Magic numbers in scenes |
+| Signals + single entry APIs | `has_method` / `call()` chains for new features |
+| `class_name` on reusable types | Autoload `class_name` that hides singleton name |
+| Clearing groups on round start (`projectile`, `corpse`, …) | Orphan nodes with unbounded lifetime |
+| Public validator APIs | Calling `ArenaRouteValidator._private` from other files |

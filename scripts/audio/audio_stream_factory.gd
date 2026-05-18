@@ -130,6 +130,18 @@ static func hit_confirm_shield() -> AudioStream:
 	return _make_one_shot(_layer_tone(640.0, 0.32, 0.005, 0.08))
 
 
+static func shield_break() -> AudioStream:
+	var cached := try_load_asset("res://audio/combat/shield_break.ogg")
+	if cached:
+		return cached
+	return _make_one_shot(_mix_layers([
+		_layer_tone(920.0, 0.38, 0.001, 0.05),
+		_layer_tone(460.0, 0.28, 0.002, 0.12),
+		_noise_layer(0.18, 0.72, 280.0, 4200.0),
+		_layer_tone(180.0, 0.22, 0.008, 0.22),
+	]))
+
+
 static func hit_confirm_health() -> AudioStream:
 	var cached := try_load_asset("res://audio/combat/hit_health.ogg")
 	if cached:
