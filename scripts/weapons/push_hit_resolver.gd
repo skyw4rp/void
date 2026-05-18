@@ -222,6 +222,10 @@ static func apply_damage_to_target(
 			body.call("damage_cover", amount, attacker, direction, force, source)
 		if _is_player_attacker(attacker) and body.is_inside_tree():
 			Crosshair.notify_player_hit_cover(body.get_tree())
+		var cover_pos: Vector3 = origin
+		if cover_pos.length_squared() < 0.001 and body is Node3D:
+			cover_pos = (body as Node3D).global_position
+		CombatAudio.play_wall_hit(cover_pos, _is_player_attacker(attacker))
 		return
 	var stats: CombatStats = body.get_node_or_null("CombatStats") as CombatStats
 	if stats:
@@ -235,6 +239,18 @@ static func apply_damage_to_target(
 		var shield_before: int = stats.shield
 		var health_before: int = stats.health
 		stats.apply_damage(amount, attacker)
+		var hit_pos_audio: Vector3 = hit_pos
+		if hit_pos_audio.length_squared() > 1e8 and body is Node3D:
+			hit_pos_audio = (body as Node3D).global_position
+		if body.is_inside_tree():
+			CombatAudio.play_hit_confirm(
+				hit_pos_audio,
+				shield_before,
+				stats.shield,
+				health_before,
+				stats.health,
+				_is_player_attacker(attacker)
+			)
 		if _is_player_attacker(attacker) and body.is_in_group("arena_opponent"):
 			Crosshair.notify_player_damage_to(
 				body.get_tree(), body, shield_before, health_before

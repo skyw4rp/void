@@ -12,7 +12,7 @@ VOID sound is **sparse, deep, and sourceless**. The abyss should feel like it ha
 - **Wind** without visible cause
 - Metallic **resonance** from bridge structure
 - Rare **rumbles** from below
-- Implementation placeholder: `scripts/environment/void_audio.gd`
+- Implementation: `VoidAudio` autoload (`scripts/environment/void_audio.gd`) — procedural loop + one-shots; optional OGG override paths in [../audio/README_REPLACE_ASSETS.md](../audio/README_REPLACE_ASSETS.md)
 
 ---
 
@@ -53,17 +53,16 @@ VOID sound is **sparse, deep, and sourceless**. The abyss should feel like it ha
 
 ---
 
-## Implementation Notes
+## Implementation Notes (P0)
 
-| Event | Placeholder print |
-|-------|-------------------|
-| Void wind | `[Void audio] Void wind` |
-| Body rupture | `[Void audio] Body rupture` |
-| Disintegration burst | `[Void audio] Disintegration burst` |
-| Silent absorption | `[Void audio] (silence — unknown destination)` |
-| Distant impact | `[Void audio] Distant impact echo` |
+| System | Detail |
+|--------|--------|
+| `VoidAudio` autoload | Ambience + proximity loops, danger pulses, void one-shots, 3D combat pool |
+| `CombatAudio` | `weapon_manager`, `enemy_weapon_manager`, `push_hit_resolver` hooks |
+| `AudioStreamFactory` | Runtime WAV placeholders; auto-loads `res://audio/**` if present |
+| Proximity | `VoidGasController` → depth + arena edge distance each frame |
 
-**Next step:** Wire `AudioStreamPlayer3D` / buses; attach to `VoidGoreSequence` timeline and `VoidAtmosphere` ambient timer.
+**Next step:** Author OGG assets (see [README_REPLACE_ASSETS.md](../../audio/README_REPLACE_ASSETS.md)); add `Void` / `Combat` audio buses; footstep metal (P1).
 
 ---
 

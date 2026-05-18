@@ -7,6 +7,8 @@ Design and production docs for the VOID project (Godot 4.6 prototype: **Neon Cat
 | Document | Purpose |
 |----------|---------|
 | [Project Bible](project_bible/PROJECT_BIBLE.md) | Vision, pillars, rules, status |
+| [VOID Design Philosophy](VOID_DESIGN_PHILOSOPHY.md) | **Canonical game-feel gate** (movement, void, combat) |
+| [VOID Prototype Audit](VOID_PROTOTYPE_AUDIT.md) | Current gaps, fixes, P0–P2 priorities |
 | [Art Direction](art/ART_DIRECTION.md) | **Perceptual horror targets** + visual identity |
 | [Visual Rules](art/VISUAL_RULES.md) | Do / don’t quick reference |
 | [Gameplay](gameplay/GAMEPLAY.md) | Loop, combat, void deaths |

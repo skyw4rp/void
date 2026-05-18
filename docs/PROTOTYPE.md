@@ -2,7 +2,7 @@
 
 Godot 4.6 first-person **knock-off duel** across **large suspended arenas** over an **infinite toxic void**. Each round picks a spacious layout with protected perimeters, intentional fall openings, and central cover. Win by **ring-out** or by **breaking shield and killing** your opponent.
 
-**Art direction:** [art/ART_DIRECTION.md](art/ART_DIRECTION.md) (canonical) · [ART_DIRECTION_VOID.md](ART_DIRECTION_VOID.md) (prototype implementation index) · [docs index](README.md)
+**Art direction:** [art/ART_DIRECTION.md](art/ART_DIRECTION.md) (canonical) · [ART_DIRECTION_VOID.md](ART_DIRECTION_VOID.md) (prototype implementation index) · [VOID design philosophy](VOID_DESIGN_PHILOSOPHY.md) · [VOID prototype audit](VOID_PROTOTYPE_AUDIT.md) · [docs index](README.md)
 
 ## Game rules
 
@@ -34,6 +34,21 @@ Shared backdrop (`VoidAtmosphere`, `VoidDistantArchitecture`) with **one procedu
 | `VoidGasController` | World fog + vignette + desaturation + DOF blur by fall depth |
 | `VoidDistantArchitecture` | Distant ruins, towers, chains in fog |
 | Ring-out | **Y < -20** — intentional gaps between platforms, not accidental wide edges |
+
+### Audio (P0)
+
+**Autoload:** `VoidAudio` (`scripts/environment/void_audio.gd`) + `AudioStreamFactory` procedural placeholders.  
+**Combat hooks:** `CombatAudio` → weapon fire (player/enemy 3D), shield/health hit confirm, cover/wall thud, hurt layer on health damage.
+
+| Layer | Behavior |
+|-------|----------|
+| Void ambience | Looping drone on round start |
+| Proximity | Volume scales with fall depth + arena edge distance (`VoidGasController`) |
+| Danger pulse | One-shots when depth bands or edge tension increase |
+| Fall rush | Bed while `_falling` in void gas |
+| Gore timeline | Wind, rupture, burst, delayed absorption (silence chance unchanged) |
+
+Replace placeholders: [audio/README_REPLACE_ASSETS.md](../audio/README_REPLACE_ASSETS.md).
 
 ## ArenaGenerator (`scripts/arena/arena_generator.gd`)
 
@@ -289,7 +304,7 @@ Change the active style in **`scripts/game_balance.gd`** → `VOID_DEATH_STYLE` 
 | **GORE_PLACEHOLDER** | Stylized red/dark fragments only (placeholder, not anatomical) |
 | **VOID_GORE** | Full cinematic pit sequence (see below) |
 
-Debug: `Void death style: …`, `Void wind`, `Body rupture`, `Disintegration burst`.
+Debug: `Void death style: …` (void SFX play via `VoidAudio`, no console prints).
 
 #### VOID_GORE cinematic timeline
 
@@ -299,7 +314,7 @@ Fall → freefall → corruption → breakup → burst → **score** → countdo
 |------|--------|
 | **0.0s** | Fall begins; loss of balance / slide; controls off |
 | **0.35s** | Instability / freefall — camera FOV **90→102**, shake ramps |
-| **0.7s** | Ambient void motes; audio: `Void wind` |
+| **0.7s** | Ambient void motes; audio: void wind gust |
 | **1.5s** | Corruption gas cloud (`void_corruption_cloud.tscn`) — green/blue/purple fog, pulsing light |
 | **2.2s** | Body hidden; **8–14** `gib_chunk` physics pieces + blood mist; debug: `Body rupture` |
 | **3.2s** | Final disintegration burst; **point awarded**; debug: `Death sequence finished, scoring` / `Disintegration burst` |

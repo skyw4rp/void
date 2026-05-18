@@ -1,0 +1,44 @@
+---
+description: VOID design gate — presence, oppression, scale, perceptual tension (not military sim)
+alwaysApply: true
+---
+
+# VOID design gate
+
+**Identity:** psychological brutalist void horror FPS — Quake-era responsiveness + oppressive megastructures + existential scale.
+
+**Canonical docs:** `docs/VOID_DESIGN_PHILOSOPHY.md` · `docs/VOID_PROTOTYPE_AUDIT.md` · `docs/art/ART_DIRECTION.md`
+
+## Final rule (every change)
+
+> Does this increase **physical presence**, **oppressive atmosphere**, **existential scale**, and **perceptual tension**?
+
+If not → cut or redesign. Gameplay feel beats realism.
+
+## Must feel like
+
+- **Movement:** immediate input, accel/friction, momentum, strafe — never floaty, animation-locked, or over-smoothed.
+- **Camera:** body-attached, kinetic feedback — mouse look stays **raw, precise, trustworthy** (never sacrifice aim for FX).
+- **Combat:** spatial rhythm — movement is defense; aggressive, readable, kinetic — not cover-shooter pacing.
+- **Enemies:** instant read of facing, aim, weapon, threat; strong silhouette; weapon projects forward.
+- **World:** architecture dominates; void is hungrier than enemies; darkness is spatial.
+
+## Must NOT be
+
+Military shooter, tactical cover sim, clean/saturation/cartoon visuals, noisy silhouettes, cinematic lag on input, realism systems that dull control.
+
+## When editing
+
+| Area | Guardrails |
+|------|------------|
+| `scripts/player.gd`, `scripts/movement/*` | Preserve Quake-style responsiveness; no input smoothing on look. |
+| `scripts/animation/*`, `scripts/enemies/*` | Weapon forward = visible aim; readability over rig complexity. |
+| `scripts/arena/*`, `scripts/environment/*` | Scale, void depth, fog, fall dread — not flat black pits. |
+| `scripts/effects/*`, audio | Impact/kinetic feedback; void silence is intentional. |
+| `docs/*` | Align with philosophy; note audit priorities when proposing features. |
+
+## Code discipline
+
+- Modular, simple, robust — avoid over-abstraction.
+- Do not add realism that reduces game feel.
+- Prefer tuning exports in `GameBalance` / movement exports over magic numbers scattered in scenes.

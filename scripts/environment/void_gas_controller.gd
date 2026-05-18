@@ -61,6 +61,11 @@ func _process(_delta: float) -> void:
 	if _distant_arch and _distant_arch.has_method("apply_depth_fade"):
 		_distant_arch.call("apply_depth_fade", depth_t, sample_y)
 
+	var edge_t: float = 0.0
+	if _player_camera:
+		edge_t = VoidAudio.compute_edge_proximity(_player_camera.global_position)
+	VoidAudio.update_void_proximity(depth_t, sample_y, _falling, edge_t)
+
 
 func get_last_depth_t() -> float:
 	return _last_depth_t

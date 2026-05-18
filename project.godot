@@ -11,9 +11,13 @@ config_version=5
 [application]
 
 config/name="Neon Catacombs"
+run/main_scene="res://scenes/main.tscn"
 config/features=PackedStringArray("4.6", "Forward Plus")
 config/icon="res://icon.svg"
-run/main_scene="res://scenes/main.tscn"
+
+[autoload]
+
+VoidAudio="*res://scripts/environment/void_audio.gd"
 
 [input]
 

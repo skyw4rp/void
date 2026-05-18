@@ -77,6 +77,7 @@ func try_fire() -> bool:
 	)
 	if _current == WeaponDefs.Id.RAILGUN:
 		print("Railgun")
+	CombatAudio.play_weapon_fire(_current, origin + base_dir * 0.35, false)
 	shot_fired.emit()
 	return true
 
