@@ -151,7 +151,7 @@ func generate_round_arena_async() -> bool:
 		print("Spawn or route invalid, regenerating arena")
 		_clear_active_arena()
 
-	# Last resort: force toxic bridge.
+	# Last resort: continuous monolith deck (Toxic Bridge template).
 	_template = ArenaTemplates.get_template(ArenaTemplates.Id.TOXIC_BRIDGE)
 	_route_path_world = PackedVector3Array()
 	var fallback_walls: Dictionary = ArenaWallSetGenerator.apply(
@@ -229,7 +229,7 @@ func pick_valid_debris_position(
 
 	var center: Vector3 = _template.center_position
 	var rect: Dictionary = _template.debris_bounds
-	var exclude: float = 4.5
+	var exclude: float = 5.5
 	var safe: Vector2 = _template.spawn_safe_half
 
 	for _attempt in 24:

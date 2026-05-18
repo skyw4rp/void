@@ -33,7 +33,7 @@ Shared backdrop (`VoidAtmosphere`, `VoidDistantArchitecture`) with **one procedu
 | `VoidAtmosphere` | Layered gas (upper / deep / corruption haze), ash particles, depth-driven density |
 | `VoidGasController` | World fog + vignette + desaturation + DOF blur by fall depth |
 | `VoidDistantArchitecture` | Distant ruins, towers, chains in fog |
-| Ring-out | **Y < -20** — intentional gaps between platforms, not accidental wide edges |
+| Ring-out | **Y < -20** — fall only from **exterior deck edges** (continuous floor, no interior pits) |
 
 ### Audio (P0)
 
@@ -57,7 +57,7 @@ Each countdown:
 1. **Clear** previous floor (`ActiveArena` children), debris, projectiles, corpses, gibs.
 2. **Pick** a template from `ArenaTemplates` (won’t repeat the same name back-to-back).
 3. **Wall set** — `ArenaWallSetGenerator` replaces/varies inner `wall_pieces` (zones, archetypes, cover density); route must include a detour.
-4. **Build** floors + walls + **outer perimeter** (~60–80% protected) + **fall zone markers** (cracked edge, void glow).
+4. **Build** one **continuous deck** + signature brutalist modules + procedural cover + **outer perimeter** (~70–80% protected) + **perimeter fall markers** (cracked edge, void glow).
 5. **Validate spawns** — floor raycast; per-body spawn height (player feet at floor, enemy capsule center +0.8); low-profile spawn pads.
 6. If invalid → regenerate (up to 6 attempts, then Toxic Bridge fallback).
 7. Spawn **5–9** destructible cover pieces on **raycast-validated** floor points.
@@ -65,17 +65,19 @@ Each countdown:
 
 ### Arena templates (`scripts/arena/arena_templates.gd`)
 
-**24×24 – 32×32** main decks, **6+ unit** bridges/corridors — intentional holes only (no random micro-gaps).
+**Continuous brutalist decks** (~**46×40** to **50×50** world units) — **one solid floor slab** per arena. **No interior void holes**; ring-out only past `danger_half_*` at the **outer rim** (perimeter openings + fog/audio/scale).
 
-| ID | Name | Layout |
-|----|------|--------|
-| `BROKEN_REACTOR` | Broken Reactor | C-walkway around **12×12** central pit |
-| `TOXIC_BRIDGE` | Toxic Bridge | **14×14** twins + **6×10** bridge |
-| `SPLIT_PLATFORMS` | Split Platforms | **13×20** decks + **6×4** catwalks |
-| `RUINED_COURTYARD` | Ruined Courtyard | Ring around **14×14** pit + corner pads |
-| `HANGING_CORRIDORS` | Hanging Corridors | **6×28** parallel lanes + end bridges |
+| ID | Name | Deck (half X × half Z) | Signature modules |
+|----|------|------------------------|-------------------|
+| `TOXIC_BRIDGE` | Toxic Bridge | **24 × 20** | Columns, massive slabs, flank half-walls |
+| `SPLIT_PLATFORMS` | Split Platforms | **26 × 22** | Four corner columns, center slab, broken walls |
+| `BROKEN_REACTOR` | Broken Reactor | **25 × 23** | Reactor columns, north/south slabs |
+| `RUINED_COURTYARD` | Ruined Courtyard | **25 × 25** | Corner columns, lateral slabs (spawn on Z axis) |
+| `HANGING_CORRIDORS` | Hanging Corridors | **23 × 27** | Side monoliths, end broken walls |
 
-Each template: `spawn_safe_half`, `fall_zones[]`, `perimeter.ringout_open_sides`, `void_y` (**-32**).
+`ArenaBrutalistModules` adds **visual-only corner pylons** for scale (no collision). Procedural `ArenaWallSetGenerator` adds flank cover (pillars, slabs, clusters) without carving floor holes.
+
+Each template: `spawn_safe_half`, perimeter `fall_zones[]`, `perimeter.ringout_open_sides`, `void_y` (**-32**).
 
 ### Outer perimeter (`scripts/arena/arena_perimeter_builder.gd`)
 
@@ -111,7 +113,7 @@ Each template: `spawn_safe_half`, `fall_zones[]`, `perimeter.ringout_open_sides`
 
 **Staged destruction** (`wall_destruction.gd`): shotgun/bazooka break walls; **railgun does not** deal wall HP damage. **Railgun pierce marks** (`railgun_pierce_mark.gd`): **entry-only** cyan/purple burn rings on pierced surfaces (**8–12 s** fade, parented to host); exit marks removed (unreliable thickness). No mesh cut. **Beam** shows penetration; brief **impact flash** at each pierce. Real geometry holes postponed. (1) wall damage → crack visual, (2) hold **0.08–0.15 s**, (3) **8–40** chunks, (4) fade host. Floors stay `StructuralFloor_*` only.
 
-**Route validation** (`arena_route_validator.gd`): floor-grid **BFS** from player spawn to enemy spawn; requires primary path **and** at least one detour (main corridor soft-blocked, second path exists). On failure, `arena_connector_builder.gd` appends a **StructuralFloor** bridge (≥ **4** u wide). Optional `debug_show_route` on `ArenaGenerator`.
+**Route validation** (`arena_route_validator.gd`): floor-grid **BFS** on the continuous deck; requires primary path **and** at least one detour. `arena_connector_builder.gd` bridge fallback is **rare** (legacy safety for disconnected layouts). Optional `debug_show_route` on `ArenaGenerator`.
 
 **Adding a template:** implement a builder in `arena_templates.gd`, add to `get_playable_ids()`, deck top at **local y = 0** (`slab` helper: center y = `-thickness/2`). Every template must have a valid floor route (or accept auto-connector).
 

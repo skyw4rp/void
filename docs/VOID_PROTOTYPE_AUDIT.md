@@ -72,11 +72,11 @@ Audit date: prototype state with arena 1v1, `GladiatorLocomotion`, `WeaponMount`
 
 | | |
 |---|---|
-| **Current state** | Procedural templates (~**16×16** danger half-extents typical), wall sets, routes, perimeter **60–80%**, fall gaps, spawn validation, destructible cover, distant architecture group. |
-| **Gap** | Good duel layout; **existential scale** limited — platforms feel “arena slab” not megastructure; repetition across rounds without vertical cathedral moments. Wall regen spam in logs suggests occasional invalid sets. |
-| **Concrete fix** | Add template variants with vertical void shafts (visual only), longer bridges, broken catwalks; widen distant silhouettes per template; reduce player-visible regen churn. Mark fall edges with cracked materials + void glow (partially present — strengthen). |
-| **Priority** | **P2** (layout); **P1** (fall-edge read at speed) |
-| **Files** | `scripts/arena/arena_templates.gd`, `scripts/arena/arena_structure_builder.gd`, `scripts/arena/arena_perimeter_builder.gd`, `scripts/arena/arena_generator.gd`, `scenes/environment/void_distant_architecture.tscn` |
+| **Current state** | **Continuous monolith decks** (~**21×18** to **23×22** danger half-extents); **no interior floor holes**. Void ring-out via exterior `danger_half_*`, perimeter openings, fall-zone VFX, void fog/audio. Signature columns/slabs + `ArenaBrutalistModules` corner pylons + procedural flank cover. Spawn/debris raycasts on solid deck. |
+| **Gap** | Still a single horizontal slab (no vertical shafts/cathedrals); procedural wall regen can still log retries on dense layouts; corner pylons are visual-only. |
+| **Concrete fix** | Vertical void vistas (visual), template-specific distant arch scale-up, stronger deck-edge crack read at sprint speed; optional rare elevated catwalk only with route validation. |
+| **Priority** | **P2** (vertical megastructure); **P1** (edge read at speed) |
+| **Files** | `scripts/arena/arena_templates.gd`, `scripts/arena/arena_brutalist_modules.gd`, `scripts/arena/arena_structure_builder.gd`, `scripts/arena/arena_wall_set_generator.gd`, `scripts/arena/arena_perimeter_builder.gd` |
 
 ---
 
@@ -121,6 +121,7 @@ Audit date: prototype state with arena 1v1, `GladiatorLocomotion`, `WeaponMount`
 - Enemy aim sync: mount forward = combat direction
 - Art docs (`docs/art/ART_DIRECTION.md`) already encode perceptual horror
 - Fast 1v1 kinetic loop — not cover-based
+- Continuous arena floor + perimeter-only void fall (fairness + combat readability)
 
 ---
 

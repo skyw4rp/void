@@ -1,4 +1,4 @@
-## Large combat arenas with intentional fall zones over deep toxic void.
+## Large continuous brutalist decks — void danger only at exterior perimeter.
 class_name ArenaTemplates
 extends RefCounted
 
@@ -9,6 +9,9 @@ enum Id {
 	RUINED_COURTYARD,
 	HANGING_CORRIDORS,
 }
+
+const DECK_THICKNESS: float = 0.32
+const EDGE_VOID_MARGIN: float = 2.6
 
 
 static func get_playable_ids() -> Array[int]:
@@ -62,184 +65,154 @@ static func _marker(x: float, z: float, sx: float, sz: float, rot: float = 0.0) 
 	return m
 
 
+static func _configure_continuous_deck(
+	t: ArenaTemplate,
+	deck_half_x: float,
+	deck_half_z: float,
+	spawn_along_x: bool,
+	spawn_frac: float = 0.4
+) -> void:
+	var th: float = DECK_THICKNESS
+	var hy: float = -th * 0.5
+	t.floor_pieces = [
+		ArenaTemplate.slab(deck_half_x * 2.0, th, deck_half_z * 2.0, 0.0, hy, 0.0),
+	]
+
+	t.ai_bounds = ArenaTemplate.AiBounds.new()
+	t.ai_bounds.danger_half_x = deck_half_x - EDGE_VOID_MARGIN
+	t.ai_bounds.danger_half_z = deck_half_z - EDGE_VOID_MARGIN
+	t.ai_bounds.safe_half_x = t.ai_bounds.danger_half_x - 2.2
+	t.ai_bounds.safe_half_z = t.ai_bounds.danger_half_z - 2.2
+
+	t.spawn_safe_half = Vector2(deck_half_x - 1.2, deck_half_z - 1.2)
+	t.debris_bounds = {
+		"x_min": -deck_half_x * 0.58,
+		"x_max": deck_half_x * 0.58,
+		"z_min": -deck_half_z * 0.58,
+		"z_max": deck_half_z * 0.58,
+	}
+	t.fall_zones = _perimeter_fall_markers(
+		t.ai_bounds.danger_half_x, t.ai_bounds.danger_half_z
+	)
+
+	var spawn_dist: float = deck_half_x * spawn_frac if spawn_along_x else deck_half_z * spawn_frac
+	if spawn_along_x:
+		t.player_spawn_local = Vector3(-spawn_dist, 1.0, 0.0)
+		t.enemy_spawn_local = Vector3(spawn_dist, 1.0, 0.0)
+	else:
+		t.player_spawn_local = Vector3(0.0, 1.0, -spawn_dist)
+		t.enemy_spawn_local = Vector3(0.0, 1.0, spawn_dist)
+
+
+static func _perimeter_fall_markers(danger_hx: float, danger_hz: float) -> Array:
+	return [
+		_marker(0.0, danger_hz * 0.96, danger_hx * 1.75, 0.35, 0.0),
+		_marker(0.0, -danger_hz * 0.96, danger_hx * 1.75, 0.35, 0.0),
+		_marker(danger_hx * 0.96, 0.0, 0.35, danger_hz * 1.75, PI * 0.5),
+		_marker(-danger_hx * 0.96, 0.0, 0.35, danger_hz * 1.75, PI * 0.5),
+	]
+
+
+static func _column(cx: float, cz: float, radius: float = 0.85) -> ArenaTemplate.WallPiece:
+	return ArenaTemplate.wall(radius * 2.0, 3.5, radius * 2.0, cx, 1.75, cz)
+
+
+static func _massive_slab(cx: float, cz: float, sx: float, sz: float) -> ArenaTemplate.WallPiece:
+	return ArenaTemplate.wall(sx, 1.4, sz, cx, 0.7, cz)
+
+
+static func _broken_wall(cx: float, cz: float, length: float = 5.0) -> ArenaTemplate.WallPiece:
+	return ArenaTemplate.wall(0.32, 2.25, length, cx, 1.12, cz)
+
+
+static func _half_cover(cx: float, cz: float) -> ArenaTemplate.WallPiece:
+	return ArenaTemplate.wall(3.2, 1.65, 0.32, cx, 0.82, cz)
+
+
 static func _toxic_bridge() -> ArenaTemplate:
 	var t := ArenaTemplate.new()
 	_apply_common(t, "Toxic Bridge", Id.TOXIC_BRIDGE)
-	var th: float = 0.28
-	var hy: float = -th * 0.5
-	t.player_spawn_local = Vector3(-9.0, 1.0, 0.0)
-	t.enemy_spawn_local = Vector3(9.0, 1.0, 0.0)
-	t.spawn_safe_half = Vector2(10.0, 5.5)
-	t.debris_bounds = {"x_min": -4.5, "x_max": 4.5, "z_min": -3.5, "z_max": 3.5}
-	t.ai_bounds = ArenaTemplate.AiBounds.new()
-	t.ai_bounds.safe_half_x = 6.5
-	t.ai_bounds.danger_half_x = 7.8
-	t.ai_bounds.safe_half_z = 5.5
-	t.ai_bounds.danger_half_z = 6.8
-	t.floor_pieces = [
-		ArenaTemplate.slab(14.0, th, 14.0, -9.0, hy, 0.0),
-		ArenaTemplate.slab(14.0, th, 14.0, 9.0, hy, 0.0),
-		ArenaTemplate.slab(6.0, th, 10.0, 0.0, hy, 0.0),
-	]
+	_configure_continuous_deck(t, 24.0, 20.0, true, 0.38)
 	t.wall_pieces = [
-		ArenaTemplate.wall(8.0, 1.2, 0.25, -9.0, 0.6, 6.2),
-		ArenaTemplate.wall(8.0, 1.2, 0.25, 9.0, 0.6, -6.2),
-		ArenaTemplate.wall(0.25, 2.4, 5.0, -3.5, 1.2, 0.0),
-		ArenaTemplate.wall(0.25, 2.4, 5.0, 3.5, 1.2, 0.0),
+		_column(-10.0, 7.5),
+		_column(10.0, -7.5),
+		_massive_slab(-6.0, 5.5, 4.5, 2.2),
+		_massive_slab(6.0, -5.5, 4.5, 2.2),
+		_broken_wall(0.0, 9.0, 6.0),
+		_half_cover(-12.0, 0.0),
+		_half_cover(12.0, 0.0),
 	]
-	t.fall_zones = [
-		_marker(-9.0, 7.2, 12.0, 0.35, 0.0),
-		_marker(9.0, -7.2, 12.0, 0.35, 0.0),
-	]
-	_finalize_perimeter(t, 0.74, 2.8, [0, 1])
+	_finalize_perimeter(t, 0.72, 3.2, [0, 1])
 	return t
 
 
 static func _split_platforms() -> ArenaTemplate:
 	var t := ArenaTemplate.new()
 	_apply_common(t, "Split Platforms", Id.SPLIT_PLATFORMS)
-	var th: float = 0.28
-	var hy: float = -th * 0.5
-	t.player_spawn_local = Vector3(-10.0, 1.0, 0.0)
-	t.enemy_spawn_local = Vector3(10.0, 1.0, 0.0)
-	t.spawn_safe_half = Vector2(11.0, 8.5)
-	t.debris_bounds = {"x_min": -5.5, "x_max": 5.5, "z_min": -5.0, "z_max": 5.0}
-	t.ai_bounds = ArenaTemplate.AiBounds.new()
-	t.ai_bounds.safe_half_x = 9.5
-	t.ai_bounds.danger_half_x = 11.0
-	t.ai_bounds.safe_half_z = 7.5
-	t.ai_bounds.danger_half_z = 8.8
-	t.floor_pieces = [
-		ArenaTemplate.slab(13.0, th, 20.0, -10.0, hy, 0.0),
-		ArenaTemplate.slab(13.0, th, 20.0, 10.0, hy, 0.0),
-		ArenaTemplate.slab(8.0, th, 6.0, 0.0, hy, 0.0),
-		ArenaTemplate.slab(6.0, th, 4.0, -10.0, hy, 8.5),
-		ArenaTemplate.slab(6.0, th, 4.0, 10.0, hy, 8.5),
-		ArenaTemplate.slab(6.0, th, 4.0, -10.0, hy, -8.5),
-		ArenaTemplate.slab(6.0, th, 4.0, 10.0, hy, -8.5),
-	]
+	_configure_continuous_deck(t, 26.0, 22.0, true, 0.4)
 	t.wall_pieces = [
-		ArenaTemplate.wall(0.28, 2.5, 8.0, -6.5, 1.25, 0.0),
-		ArenaTemplate.wall(0.28, 2.5, 8.0, 6.5, 1.25, 0.0),
-		ArenaTemplate.wall(4.0, 1.15, 0.28, -10.0, 0.58, 5.5),
-		ArenaTemplate.wall(4.0, 1.15, 0.28, 10.0, 0.58, -5.5),
+		_column(-14.0, 10.0),
+		_column(14.0, -10.0),
+		_column(-14.0, -10.0),
+		_column(14.0, 10.0),
+		_massive_slab(0.0, 11.0, 8.0, 2.4),
+		_broken_wall(-8.0, 6.0, 5.5),
+		_broken_wall(8.0, -6.0, 5.5),
+		_half_cover(0.0, -11.5),
 	]
-	t.fall_zones = [
-		_marker(-10.0, 10.5, 11.0, 0.35, 0.0),
-		_marker(10.0, -10.5, 11.0, 0.35, 0.0),
-	]
-	_finalize_perimeter(t, 0.76, 3.0, [2, 3])
+	_finalize_perimeter(t, 0.74, 3.4, [2, 3])
 	return t
 
 
 static func _broken_reactor() -> ArenaTemplate:
 	var t := ArenaTemplate.new()
 	_apply_common(t, "Broken Reactor", Id.BROKEN_REACTOR)
-	var th: float = 0.28
-	var hy: float = -th * 0.5
-	t.player_spawn_local = Vector3(-11.0, 1.0, 0.0)
-	t.enemy_spawn_local = Vector3(11.0, 1.0, 0.0)
-	t.spawn_safe_half = Vector2(12.0, 8.5)
-	t.debris_bounds = {"x_min": -4.0, "x_max": 4.0, "z_min": -4.5, "z_max": 4.5}
-	t.ai_bounds = ArenaTemplate.AiBounds.new()
-	t.ai_bounds.safe_half_x = 10.5
-	t.ai_bounds.danger_half_x = 12.0
-	t.ai_bounds.safe_half_z = 8.5
-	t.ai_bounds.danger_half_z = 9.8
-	# C-shaped walkway around central void pit (12×12) — single intentional hole.
-	t.floor_pieces = [
-		ArenaTemplate.slab(28.0, th, 6.0, 0.0, hy, -9.5),
-		ArenaTemplate.slab(28.0, th, 6.0, 0.0, hy, 9.5),
-		ArenaTemplate.slab(6.0, th, 16.0, -11.0, hy, 0.0),
-		ArenaTemplate.slab(6.0, th, 16.0, 11.0, hy, 0.0),
-	]
+	_configure_continuous_deck(t, 25.0, 23.0, true, 0.39)
 	t.wall_pieces = [
-		ArenaTemplate.wall(4.0, 2.4, 0.28, 0.0, 1.2, -6.2),
-		ArenaTemplate.wall(4.0, 2.4, 0.28, 0.0, 1.2, 6.2),
-		ArenaTemplate.wall(0.28, 2.6, 4.0, -6.5, 1.3, -9.5),
-		ArenaTemplate.wall(0.28, 2.6, 4.0, 6.5, 1.3, -9.5),
-		ArenaTemplate.wall(1.0, 2.8, 1.0, -11.0, 1.4, 0.0),
-		ArenaTemplate.wall(1.0, 2.8, 1.0, 11.0, 1.4, 0.0),
+		_column(-11.0, 0.0, 1.05),
+		_column(11.0, 0.0, 1.05),
+		_massive_slab(0.0, 8.5, 6.5, 2.8),
+		_massive_slab(0.0, -8.5, 6.5, 2.8),
+		_broken_wall(-7.0, 7.0, 4.5),
+		_broken_wall(7.0, -7.0, 4.5),
+		_half_cover(-13.0, 5.0),
+		_half_cover(13.0, -5.0),
 	]
-	t.fall_zones = [
-		_marker(0.0, -6.2, 10.0, 0.35, 0.0),
-		_marker(0.0, 6.2, 10.0, 0.35, 0.0),
-		_marker(-6.2, 0.0, 0.35, 10.0, PI * 0.5),
-		_marker(6.2, 0.0, 0.35, 10.0, PI * 0.5),
-	]
-	_finalize_perimeter(t, 0.78, 3.2, [])
+	_finalize_perimeter(t, 0.76, 3.4, [0, 1, 2, 3])
 	return t
 
 
 static func _ruined_courtyard() -> ArenaTemplate:
 	var t := ArenaTemplate.new()
 	_apply_common(t, "Ruined Courtyard", Id.RUINED_COURTYARD)
-	var th: float = 0.26
-	var hy: float = -th * 0.5
-	t.player_spawn_local = Vector3(0.0, 1.0, 9.5)
-	t.enemy_spawn_local = Vector3(0.0, 1.0, -9.5)
-	t.spawn_safe_half = Vector2(6.5, 11.0)
-	t.debris_bounds = {"x_min": -4.5, "x_max": 4.5, "z_min": -3.0, "z_max": 3.0}
-	t.ai_bounds = ArenaTemplate.AiBounds.new()
-	t.ai_bounds.safe_half_x = 10.0
-	t.ai_bounds.danger_half_x = 11.5
-	t.ai_bounds.safe_half_z = 10.0
-	t.ai_bounds.danger_half_z = 11.2
-	# Ring walkway (4u wide) around 14×14 inner pit.
-	t.floor_pieces = [
-		ArenaTemplate.slab(28.0, th, 4.0, 0.0, hy, -10.0),
-		ArenaTemplate.slab(28.0, th, 4.0, 0.0, hy, 10.0),
-		ArenaTemplate.slab(4.0, th, 16.0, -12.0, hy, 0.0),
-		ArenaTemplate.slab(4.0, th, 16.0, 12.0, hy, 0.0),
-		ArenaTemplate.slab(8.0, th, 8.0, -12.0, hy, -12.0),
-		ArenaTemplate.slab(8.0, th, 8.0, 12.0, hy, -12.0),
-		ArenaTemplate.slab(8.0, th, 8.0, -12.0, hy, 12.0),
-		ArenaTemplate.slab(8.0, th, 8.0, 12.0, hy, 12.0),
-	]
+	_configure_continuous_deck(t, 25.0, 25.0, false, 0.38)
 	t.wall_pieces = [
-		ArenaTemplate.wall(1.0, 2.6, 1.0, -5.0, 1.3, -5.0),
-		ArenaTemplate.wall(1.0, 2.6, 1.0, 5.0, 1.3, -5.0),
-		ArenaTemplate.wall(2.5, 1.1, 0.25, 0.0, 0.55, -7.2),
-		ArenaTemplate.wall(2.5, 1.1, 0.25, 0.0, 0.55, 7.2),
+		_column(-9.0, 9.0),
+		_column(9.0, -9.0),
+		_column(-9.0, -9.0),
+		_column(9.0, 9.0),
+		_massive_slab(-6.0, 0.0, 3.5, 7.0),
+		_massive_slab(6.0, 0.0, 3.5, 7.0),
+		_broken_wall(0.0, 10.5, 7.5),
+		_half_cover(11.0, 0.0),
 	]
-	t.fall_zones = [
-		_marker(0.0, -7.0, 8.0, 0.35, 0.0),
-		_marker(0.0, 7.0, 8.0, 0.35, 0.0),
-		_marker(-7.0, 0.0, 0.35, 8.0, PI * 0.5),
-		_marker(7.0, 0.0, 0.35, 8.0, PI * 0.5),
-	]
-	_finalize_perimeter(t, 0.8, 3.0, [0, 1])
+	_finalize_perimeter(t, 0.78, 3.5, [0, 1])
 	return t
 
 
 static func _hanging_corridors() -> ArenaTemplate:
 	var t := ArenaTemplate.new()
 	_apply_common(t, "Hanging Corridors", Id.HANGING_CORRIDORS)
-	var th: float = 0.26
-	var hy: float = -th * 0.5
-	t.player_spawn_local = Vector3(-9.0, 1.0, -10.0)
-	t.enemy_spawn_local = Vector3(9.0, 1.0, 10.0)
-	t.spawn_safe_half = Vector2(10.0, 12.0)
-	t.debris_bounds = {"x_min": -1.8, "x_max": 1.8, "z_min": -7.0, "z_max": 7.0}
-	t.ai_bounds = ArenaTemplate.AiBounds.new()
-	t.ai_bounds.safe_half_x = 10.5
-	t.ai_bounds.danger_half_x = 12.0
-	t.ai_bounds.safe_half_z = 12.5
-	t.ai_bounds.danger_half_z = 14.0
-	t.floor_pieces = [
-		ArenaTemplate.slab(6.0, th, 28.0, -9.0, hy, 0.0),
-		ArenaTemplate.slab(6.0, th, 28.0, 9.0, hy, 0.0),
-		ArenaTemplate.slab(6.0, th, 4.0, 0.0, hy, -12.5),
-		ArenaTemplate.slab(6.0, th, 4.0, 0.0, hy, 12.5),
-	]
+	_configure_continuous_deck(t, 23.0, 27.0, false, 0.37)
 	t.wall_pieces = [
-		ArenaTemplate.wall(0.25, 1.1, 22.0, -12.2, 0.55, 0.0),
-		ArenaTemplate.wall(0.25, 1.1, 22.0, 12.2, 0.55, 0.0),
-		ArenaTemplate.wall(3.5, 2.2, 0.28, 0.0, 1.1, -12.5),
+		_column(-8.0, 12.0),
+		_column(8.0, -12.0),
+		_massive_slab(-11.0, 0.0, 2.8, 10.0),
+		_massive_slab(11.0, 0.0, 2.8, 10.0),
+		_broken_wall(-5.0, 11.0, 5.0),
+		_broken_wall(5.0, -11.0, 5.0),
+		_half_cover(0.0, 13.0),
+		_half_cover(0.0, -13.0),
 	]
-	t.fall_zones = [
-		_marker(-9.0, 14.5, 5.0, 0.35, 0.0),
-		_marker(9.0, -14.5, 5.0, 0.35, 0.0),
-	]
-	_finalize_perimeter(t, 0.75, 3.0, [2, 3])
+	_finalize_perimeter(t, 0.73, 3.3, [2, 3])
 	return t

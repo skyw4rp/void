@@ -181,19 +181,20 @@ static func _generate_for_profile(
 
 
 static func _recipe_for_template(template_id: int) -> Dictionary:
+	# Continuous decks — procedural cover stays in flanks, not interior pits.
 	match template_id:
 		ArenaTemplates.Id.TOXIC_BRIDGE:
-			return {"min_walls": 3, "max_walls": 8}
-		ArenaTemplates.Id.SPLIT_PLATFORMS:
-			return {"min_walls": 4, "max_walls": 10}
-		ArenaTemplates.Id.BROKEN_REACTOR:
 			return {"min_walls": 4, "max_walls": 11}
+		ArenaTemplates.Id.SPLIT_PLATFORMS:
+			return {"min_walls": 5, "max_walls": 12}
+		ArenaTemplates.Id.BROKEN_REACTOR:
+			return {"min_walls": 5, "max_walls": 12}
 		ArenaTemplates.Id.RUINED_COURTYARD:
-			return {"min_walls": 3, "max_walls": 9}
+			return {"min_walls": 4, "max_walls": 11}
 		ArenaTemplates.Id.HANGING_CORRIDORS:
-			return {"min_walls": 3, "max_walls": 8}
+			return {"min_walls": 4, "max_walls": 11}
 		_:
-			return {"min_walls": 3, "max_walls": 8}
+			return {"min_walls": 4, "max_walls": 11}
 
 
 static func _collect_candidate_cells(
@@ -214,9 +215,9 @@ static func _collect_candidate_cells(
 			if not grid.walkable.has(cell):
 				continue
 			var local: Vector2 = ArenaRouteValidator._cell_to_local(cell)
-			if absf(local.x) > safe.x * 0.92 or absf(local.y) > safe.y * 0.92:
+			if absf(local.x) > safe.x * 0.88 or absf(local.y) > safe.y * 0.88:
 				continue
-			if _cell_near_spawn(cell, spawn_p, 3) or _cell_near_spawn(cell, spawn_e, 3):
+			if _cell_near_spawn(cell, spawn_p, 4) or _cell_near_spawn(cell, spawn_e, 4):
 				continue
 			out.append(cell)
 	return out

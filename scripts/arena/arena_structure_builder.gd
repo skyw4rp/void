@@ -51,6 +51,7 @@ static func build(parent: Node3D, template: ArenaTemplate) -> void:
 			"%03d" % wall_index
 		)
 
+	ArenaBrutalistModules.build(parent, template)
 	ArenaPerimeterBuilder.build(parent, template)
 	ArenaFallZoneBuilder.build(parent, template)
 
