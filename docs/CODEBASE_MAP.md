@@ -49,7 +49,7 @@ await ArenaGenerator.generate_round_arena_async()
   → ArenaMazeGenerator.apply (structural walls)
   → ArenaWallSetGenerator.apply (destructible cover)
   → ArenaRouteValidator (≥2 routes, spawn clearance)
-  → ArenaStructureBuilder.build → ActiveArena
+  → ArenaStructureBuilder.build (incl. ArenaChamberPass) → ActiveArena
   → spawn raycast validation
 _clear: projectiles, corpses, void_effect, gib_chunk, dismember, railgun VFX, debris
 _spawn_round_debris (DebrisSpawner)
@@ -415,7 +415,28 @@ Legend: **Writes** = authoritative mutations. **Reads** = primary consumers.
 | **Public API** | `static build(parent, template)` |
 | **Writes** | Scene tree under `ActiveArena` |
 | **Reads** | `ArenaTemplate`, materials |
-| **Risks** | Order: floor → structural → destructible → modules → perimeter |
+| **Risks** | Order: floor → structural → destructible → modules → perimeter → fall zones → **chamber pass** |
+
+#### `scripts/arena/arena_chamber_pass.gd`
+
+| | |
+|--|--|
+| **Purpose** | Suspended gladiator chamber read: void abyss, deck zones, landmark, megastructures, particles, lights |
+| **Public API** | `static build(parent, template)` |
+| **Writes** | `ArenaChamberPass` subtree (groups `arena_chamber_decor`, `arena_chamber_light`) |
+| **Reads** | `ArenaTemplate` bounds / perimeter config |
+| **Calls** | `ArenaMegastructurePass.build` |
+| **Risks** | Visual-only — must not add collision that blocks routes or spawns |
+
+#### `scripts/arena/arena_megastructure_pass.gd`
+
+| | |
+|--|--|
+| **Purpose** | Layered distant megastructures, sparse beacons, void ambient events |
+| **Public API** | `static build(parent, template, rng)` |
+| **Writes** | `ArenaMegastructurePass` subtree; `ArenaMegastructureVoidEvents` controller |
+| **Helpers** | `arena_megastructure_beacon.gd`, `arena_megastructure_void_events.gd` |
+| **Risks** | Keep outside play radius; rare lights/events only — no gameplay hooks |
 
 #### `scripts/arena/destructible_wall.gd`
 

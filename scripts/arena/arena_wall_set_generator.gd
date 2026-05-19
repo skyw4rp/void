@@ -29,6 +29,12 @@ enum Archetype {
 	RUINED_COLUMN,
 	ANGLED_COVER,
 	DESTROYED_SEGMENT,
+	LOW_COVER,
+	MID_WALL,
+	BROKEN_PILLAR,
+	ARCH,
+	SLAB,
+	HALF_COLLAPSED,
 }
 
 const MAX_LAYOUT_ATTEMPTS: int = 12
@@ -45,6 +51,44 @@ static func get_profile_names() -> PackedStringArray:
 		"LongSight",
 		"CloseQuarters",
 	])
+
+
+static func get_cover_type_names() -> PackedStringArray:
+	return PackedStringArray([
+		"LowCover",
+		"MidWall",
+		"HalfWall",
+		"BrokenPillar",
+		"Arch",
+		"Slab",
+		"HalfCollapsed",
+		"ThinSlab",
+		"Pillar",
+		"BrokenWall",
+		"CoverCluster",
+		"SplitBarrier",
+		"RuinedColumn",
+		"AngledCover",
+		"DestroyedSegment",
+	])
+
+
+static func cover_label_for(arch: Archetype) -> String:
+	match arch:
+		Archetype.LOW_COVER, Archetype.THIN_SLAB:
+			return "LowCover"
+		Archetype.MID_WALL, Archetype.HALF_WALL:
+			return "MidWall"
+		Archetype.BROKEN_PILLAR, Archetype.PILLAR, Archetype.RUINED_COLUMN:
+			return "BrokenPillar"
+		Archetype.ARCH:
+			return "Arch"
+		Archetype.SLAB:
+			return "Slab"
+		Archetype.HALF_COLLAPSED, Archetype.DESTROYED_SEGMENT, Archetype.BROKEN_WALL:
+			return "HalfCollapsed"
+		_:
+			return "Cover"
 
 
 static func apply(template: ArenaTemplate, template_id: int) -> Dictionary:
@@ -267,22 +311,40 @@ static func _pick_archetype_for_zone(
 	var pool: Array[int] = []
 	match zone:
 		ZoneKind.CENTER:
-			pool = [Archetype.PILLAR, Archetype.SPLIT_BARRIER, Archetype.RUINED_COLUMN, Archetype.HALF_WALL]
+			pool = [
+				Archetype.PILLAR, Archetype.SPLIT_BARRIER, Archetype.RUINED_COLUMN,
+				Archetype.MID_WALL, Archetype.ARCH, Archetype.BROKEN_PILLAR,
+			]
 		ZoneKind.SIDE_LANE:
-			pool = [Archetype.THIN_SLAB, Archetype.HALF_WALL, Archetype.COVER_CLUSTER, Archetype.ANGLED_COVER]
+			pool = [
+				Archetype.LOW_COVER, Archetype.MID_WALL, Archetype.SLAB,
+				Archetype.COVER_CLUSTER, Archetype.ANGLED_COVER,
+			]
 		ZoneKind.FLANK:
-			pool = [Archetype.ANGLED_COVER, Archetype.BROKEN_WALL, Archetype.DESTROYED_SEGMENT, Archetype.PILLAR]
+			pool = [
+				Archetype.ANGLED_COVER, Archetype.HALF_COLLAPSED, Archetype.BROKEN_WALL,
+				Archetype.ARCH, Archetype.BROKEN_PILLAR,
+			]
 		ZoneKind.EDGE_DANGER:
-			pool = [Archetype.THIN_SLAB, Archetype.BROKEN_WALL, Archetype.DESTROYED_SEGMENT]
+			pool = [
+				Archetype.LOW_COVER, Archetype.SLAB, Archetype.HALF_COLLAPSED,
+				Archetype.DESTROYED_SEGMENT,
+			]
 		ZoneKind.SPAWN_APPROACH:
-			pool = [Archetype.HALF_WALL, Archetype.DESTROYED_SEGMENT, Archetype.BROKEN_WALL]
+			pool = [
+				Archetype.MID_WALL, Archetype.HALF_COLLAPSED, Archetype.DESTROYED_SEGMENT,
+				Archetype.LOW_COVER,
+			]
 		_:
-			pool = [Archetype.HALF_WALL, Archetype.PILLAR]
+			pool = [Archetype.MID_WALL, Archetype.BROKEN_PILLAR]
 
 	if profile == WallSetProfile.LONG_SIGHT:
-		pool = [Archetype.THIN_SLAB, Archetype.HALF_WALL, Archetype.DESTROYED_SEGMENT]
+		pool = [Archetype.LOW_COVER, Archetype.MID_WALL, Archetype.SLAB, Archetype.DESTROYED_SEGMENT]
 	elif profile == WallSetProfile.CLOSE_QUARTERS:
-		pool = [Archetype.HALF_WALL, Archetype.COVER_CLUSTER, Archetype.SPLIT_BARRIER, Archetype.PILLAR]
+		pool = [
+			Archetype.MID_WALL, Archetype.COVER_CLUSTER, Archetype.SPLIT_BARRIER,
+			Archetype.BROKEN_PILLAR, Archetype.HALF_COLLAPSED,
+		]
 
 	return pool[rng.randi_range(0, pool.size() - 1)] as Archetype
 
@@ -327,6 +389,32 @@ static func _build_archetype(
 			]
 		Archetype.DESTROYED_SEGMENT:
 			return [ArenaTemplate.wall(1.8, 0.85, 0.25, cx, 0.42, cz)]
+		Archetype.LOW_COVER:
+			if rng.randf() > 0.5:
+				return [ArenaTemplate.wall(2.6, 1.05, 0.25, cx, 0.52, cz)]
+			return [ArenaTemplate.wall(0.25, 1.05, 2.6, cx, 0.52, cz)]
+		Archetype.MID_WALL:
+			if rng.randf() > 0.5:
+				return [ArenaTemplate.wall(3.4, 2.05, 0.32, cx, 1.02, cz)]
+			return [ArenaTemplate.wall(0.32, 2.05, 3.4, cx, 1.02, cz)]
+		Archetype.BROKEN_PILLAR:
+			return [
+				ArenaTemplate.wall(1.05, 2.8, 1.05, cx, 1.4, cz),
+				ArenaTemplate.wall(0.7, 1.2, 0.7, cx + 0.65, 0.6, cz + 0.4),
+			]
+		Archetype.ARCH:
+			return [
+				ArenaTemplate.wall(0.9, 2.6, 0.9, cx - 1.6, 1.3, cz),
+				ArenaTemplate.wall(0.9, 2.2, 0.9, cx + 1.6, 1.1, cz),
+				ArenaTemplate.wall(4.2, 0.55, 0.32, cx, 2.55, cz),
+			]
+		Archetype.SLAB:
+			return [ArenaTemplate.wall(3.8, 0.55, 2.2, cx, 0.28, cz)]
+		Archetype.HALF_COLLAPSED:
+			return [
+				ArenaTemplate.wall(2.4, 1.35, 0.28, cx - 0.6, 0.68, cz),
+				ArenaTemplate.wall(1.6, 0.75, 0.28, cx + 0.9, 0.38, cz + 0.5),
+			]
 		_:
 			return []
 

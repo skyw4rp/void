@@ -11,9 +11,9 @@ This document reflects what exists in the repository today, not planned features
 |-------|--------|
 | **Game name** | Neon Catacombs |
 | **Genre** | First-person arena duel / knock-off combat prototype |
-| **Engine** | Godot 4.6 (Forward Plus), main scene `res://scenes/main.tscn` |
+| **Engine** | Godot 4.6 (Forward Plus), main scene `res://scenes/chamber/gladiator_chamber.tscn` (arena via `arena_match.tscn`) |
 | **Core concept** | 1v1 fights on suspended platforms over a lethal void. Win by knocking the opponent off (ring-out) or depleting shield + health (kill). |
-| **Prototype status** | Playable vertical slice: five large procedural arenas, perimeter walls, fall-zone warnings, deep toxic gas, void/kill deaths, match to 5 points. |
+| **Prototype status** | Playable vertical slice: gladiator chamber loop, five large procedural arenas, **Arena Chamber Pass** + **Megastructure Pass** (layered distant ruins), tall perimeter shell, fall-zone warnings, deep toxic gas, void/kill deaths, match to 5 points. |
 | **Elevator pitch** | A brutalist pit-fighter duel in a fog-choked void — fight on spacious suspended ruins, knock foes through intentional openings into gas that swallows visibility below. |
 | **Target experience** | Tension at the edge, readable knockback, satisfying kills and void falls, short explosive rounds, growing dread from the abyss. |
 | **Current loop** | Match → random arena build → countdown → fight → point (void or kill) → respawn → repeat until 5 points → win/lose screen. |
@@ -393,14 +393,42 @@ Post-score: delayed absorption audio / distant flash (chance-based placeholders)
 | Templates | `scripts/arena/arena_templates.gd` |
 | Template data | `scripts/arena/arena_template.gd` |
 | Structure build | `scripts/arena/arena_structure_builder.gd` |
-| Perimeter | `scripts/arena/arena_perimeter_builder.gd` (~60–80% walls) |
+| Perimeter | `scripts/arena/arena_perimeter_builder.gd` (~**80–86%** shell, **6–12 u** segments) |
+| Chamber pass | `scripts/arena/arena_chamber_pass.gd` (void abyss, zones, landmark, particles, lights) |
+| Megastructure pass | `scripts/arena/arena_megastructure_pass.gd` + beacon / void-events helpers |
+| Wall sets | `scripts/arena/arena_wall_set_generator.gd` (low/mid/arch/slab/collapsed cover types) |
 | Fall warnings | `scripts/arena/arena_fall_zone_builder.gd` |
+
+### Arena Chamber Pass
+
+Post-build visual layer (no gameplay collision):
+
+- **Central platform** vs **outer ring** deck overlays for combat lane / ring-out read.
+- **Void below:** gas cloud + deep void plane + rise particles + under-glow (revealed on fall).
+- **One landmark per round** (random): broken bridge, massive pillar, fractured arch, suspended ring, collapsed tower.
+- **Atmosphere:** dust, ash, metal spark CPU particles.
+- **Lighting:** cold top key, void fill from below, rim accents (combat weapon flashes unchanged).
+- **Verticality decor:** 2–4 visual-only ramps / micro-platforms (readability-safe).
+
+### Megastructure Pass
+
+Procedural distant VOID civilization (`arena_megastructure_pass.gd`):
+
+| Item | Detail |
+|------|--------|
+| Structures | **3–8** clusters; types: bridge, tower, ring, shaft, pillar, wall, deck, arch |
+| Layers | Near / mid / far depth zones with increasing fog opacity |
+| Height | **30–120** units; placed outside danger bounds + margin |
+| Chains | Linked ruins (~55%) — bridge→tower, pillar→deck, arch→segment |
+| Lights | **1–3** rare red/cyan/white emissive beacons with blink |
+| Void events | Distant flash, lightning, debris, resonance — timer-driven, no scoring |
+| Performance | No collision, no AI; alpha silhouettes + sparse lights |
 
 ### Round pipeline
 
 1. Clear `ActiveArena` children.
 2. Pick random template (no back-to-back same `arena_name`).
-3. Build floors, inner walls, perimeter, fall-zone markers.
+3. Maze + wall set + build floors, inner walls, perimeter, fall-zone markers, **chamber pass**.
 4. Validate spawns inside `spawn_safe_half` (away from pit edges).
 5. Up to **6** attempts; fallback **Toxic Bridge**.
 
@@ -582,7 +610,9 @@ neon-catacombs/
 | Normal death corpse | Done | 2.5 s delay |
 | Directional dismemberment | Done | Weapon profiles, body parts |
 | Heavy death gibbing | Done | 1.8–2.2 s delay |
-| ArenaGenerator | Done | 2 playable templates |
+| ArenaGenerator | Done | 5 playable templates + chamber pass |
+| Arena Chamber Pass | Done | Landmark, void abyss, atmosphere |
+| Megastructure Pass | Done | 3-layer distant ruins, beacons, void events |
 | Spawn validation | Done | Raycast floor |
 | Destructible cover | Done | 4 types, HP |
 | Cover floor validation | Done | Raycast |
@@ -644,7 +674,7 @@ neon-catacombs/
 
 ### Bugs / risks
 
-- **Legacy arena content** in repo can confuse which system is authoritative; only `ArenaGenerator` drives `main.tscn`.
+- **Legacy arena content** in repo can confuse which system is authoritative; only `ArenaGenerator` drives `arena_match.tscn` / active duel.
 - **Placeholder templates** (Pillar Ring, Twin Lanes, Central Ruins) warn and clone Pit Bridge if ever added to playable list.
 - **All arenas at origin** — only one active floor at a time; correct by design but legacy scenes suggest multi-offset world.
 - **`void_audio.gd`** — debug print placeholders only, no real SFX.

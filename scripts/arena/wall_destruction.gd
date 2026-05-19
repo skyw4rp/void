@@ -5,8 +5,8 @@ extends Object
 const MIN_CHUNKS: int = 8
 const MAX_CHUNKS: int = 40
 const MAX_ACTIVE_FRAGMENTS: int = 140
-const HOLD_SEC_MIN: float = 0.08
-const HOLD_SEC_MAX: float = 0.15
+const HOLD_SEC_MIN: float = 0.05
+const HOLD_SEC_MAX: float = 0.10
 const FADE_SEC: float = 0.12
 
 

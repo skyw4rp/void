@@ -143,7 +143,7 @@ static func _toxic_bridge() -> ArenaTemplate:
 		_half_cover(-12.0, 0.0),
 		_half_cover(12.0, 0.0),
 	]
-	_finalize_perimeter(t, 0.72, 3.2, [0, 1])
+	_finalize_perimeter(t, 0.80, 3.2, [0, 1])
 	return t
 
 
@@ -161,7 +161,7 @@ static func _split_platforms() -> ArenaTemplate:
 		_broken_wall(8.0, -6.0, 5.5),
 		_half_cover(0.0, -11.5),
 	]
-	_finalize_perimeter(t, 0.74, 3.4, [2, 3])
+	_finalize_perimeter(t, 0.82, 3.4, [2, 3])
 	return t
 
 
@@ -179,7 +179,7 @@ static func _broken_reactor() -> ArenaTemplate:
 		_half_cover(-13.0, 5.0),
 		_half_cover(13.0, -5.0),
 	]
-	_finalize_perimeter(t, 0.76, 3.4, [0, 1, 2, 3])
+	_finalize_perimeter(t, 0.84, 3.4, [0, 1, 2, 3])
 	return t
 
 
@@ -197,7 +197,7 @@ static func _ruined_courtyard() -> ArenaTemplate:
 		_broken_wall(0.0, 10.5, 7.5),
 		_half_cover(11.0, 0.0),
 	]
-	_finalize_perimeter(t, 0.78, 3.5, [0, 1])
+	_finalize_perimeter(t, 0.86, 3.5, [0, 1])
 	return t
 
 
@@ -215,5 +215,5 @@ static func _hanging_corridors() -> ArenaTemplate:
 		_half_cover(0.0, 13.0),
 		_half_cover(0.0, -13.0),
 	]
-	_finalize_perimeter(t, 0.73, 3.3, [2, 3])
+	_finalize_perimeter(t, 0.81, 3.3, [2, 3])
 	return t

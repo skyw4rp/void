@@ -2,7 +2,15 @@
 class_name ArenaPerimeterBuilder
 extends RefCounted
 
-enum PieceKind { FULL_RUINED, HALF, COLLAPSED, CRACKED_PILLAR, HANGING_PANEL }
+enum PieceKind {
+	FULL_RUINED,
+	HALF,
+	COLLAPSED,
+	CRACKED_PILLAR,
+	HANGING_PANEL,
+	BREACH_GAP,
+	FRACTURE_STUB,
+}
 
 const WALL_GROUP: String = "arena_wall"
 const PERIMETER_GROUP: String = "arena_perimeter"
@@ -108,7 +116,12 @@ static func _build_side(
 			continue
 
 		var kind: PieceKind = _pick_kind(rng, is_corner)
+		if kind == PieceKind.BREACH_GAP:
+			_place_breach_gap(parent, template, local_pos, side_index, rng, tangent_axis)
+			continue
 		_place_piece(parent, template, local_pos, kind, side_index, rng)
+		if rng.randf() < 0.32:
+			_place_fracture_shard(parent, template, local_pos, side_index, rng)
 
 		if is_corner and rng.randf() > 0.5:
 			_place_decor_panel(
@@ -131,19 +144,25 @@ static func _outward_distance(side_index: int, hx: float, hz: float, margin: flo
 static func _pick_kind(rng: RandomNumberGenerator, is_corner: bool) -> PieceKind:
 	var roll: float = rng.randf()
 	if is_corner:
-		if roll < 0.35:
+		if roll < 0.28:
 			return PieceKind.CRACKED_PILLAR
-		if roll < 0.6:
+		if roll < 0.48:
 			return PieceKind.COLLAPSED
+		if roll < 0.58:
+			return PieceKind.FRACTURE_STUB
 		return PieceKind.FULL_RUINED
+	if roll < 0.12:
+		return PieceKind.BREACH_GAP
 	if roll < 0.28:
 		return PieceKind.HALF
-	if roll < 0.45:
+	if roll < 0.44:
 		return PieceKind.COLLAPSED
-	if roll < 0.62:
+	if roll < 0.58:
 		return PieceKind.HANGING_PANEL
-	if roll < 0.78:
+	if roll < 0.72:
 		return PieceKind.CRACKED_PILLAR
+	if roll < 0.84:
+		return PieceKind.FRACTURE_STUB
 	return PieceKind.FULL_RUINED
 
 
@@ -151,23 +170,31 @@ static func _piece_size(kind: PieceKind, rng: RandomNumberGenerator) -> Vector3:
 	match kind:
 		PieceKind.HALF:
 			return Vector3(
-				rng.randf_range(2.8, 5.0), rng.randf_range(0.9, 1.4), THICKNESS
+				rng.randf_range(2.8, 5.0), rng.randf_range(3.2, 5.8), THICKNESS
 			)
 		PieceKind.COLLAPSED:
 			return Vector3(
-				rng.randf_range(2.5, 4.5), rng.randf_range(1.2, 1.8), THICKNESS
+				rng.randf_range(2.5, 4.5), rng.randf_range(4.0, 7.5), THICKNESS
 			)
 		PieceKind.CRACKED_PILLAR:
 			return Vector3(
-				rng.randf_range(0.85, 1.25), rng.randf_range(2.6, 3.8), rng.randf_range(0.85, 1.25)
+				rng.randf_range(0.85, 1.35), rng.randf_range(6.5, 11.0), rng.randf_range(0.85, 1.35)
 			)
 		PieceKind.HANGING_PANEL:
 			return Vector3(
-				rng.randf_range(2.2, 4.0), rng.randf_range(1.6, 2.4), rng.randf_range(0.12, 0.22)
+				rng.randf_range(2.2, 4.0), rng.randf_range(2.8, 4.2), rng.randf_range(0.12, 0.22)
+			)
+		PieceKind.FRACTURE_STUB:
+			return Vector3(
+				rng.randf_range(1.2, 2.4), rng.randf_range(2.5, 4.5), THICKNESS * 0.9
+			)
+		PieceKind.BREACH_GAP:
+			return Vector3(
+				rng.randf_range(1.4, 2.2), rng.randf_range(3.5, 6.0), THICKNESS
 			)
 		_:
 			return Vector3(
-				rng.randf_range(3.0, 5.5), rng.randf_range(2.5, 3.8), THICKNESS
+				rng.randf_range(3.0, 5.5), rng.randf_range(6.5, 11.0), THICKNESS
 			)
 
 
@@ -191,6 +218,45 @@ static func _piece_rotation(kind: PieceKind, rng: RandomNumberGenerator, side_in
 	return rot
 
 
+static func _place_breach_gap(
+	parent: Node3D,
+	template: ArenaTemplate,
+	local_pos: Vector3,
+	side_index: int,
+	rng: RandomNumberGenerator,
+	tangent_axis: Vector3
+) -> void:
+	var stub_kind: PieceKind = PieceKind.FRACTURE_STUB if rng.randf() > 0.5 else PieceKind.COLLAPSED
+	var gap: float = rng.randf_range(2.8, 4.5)
+	for sign in [-1.0, 1.0]:
+		var offset: Vector3 = local_pos + tangent_axis * sign * gap
+		_place_piece(parent, template, offset, stub_kind, side_index, rng)
+
+
+static func _place_fracture_shard(
+	parent: Node3D,
+	template: ArenaTemplate,
+	local_pos: Vector3,
+	side_index: int,
+	rng: RandomNumberGenerator
+) -> void:
+	var size: Vector3 = _orient_size_for_side(
+		Vector3(
+			rng.randf_range(0.35, 0.85),
+			rng.randf_range(0.5, 1.2),
+			rng.randf_range(0.25, 0.55)
+		),
+		side_index
+	)
+	local_pos.y = size.y * 0.5 + rng.randf_range(-0.2, 0.8)
+	var mat: StandardMaterial3D = _pick_material(rng)
+	mat.albedo_color = mat.albedo_color.darkened(0.12)
+	var rot := Vector3(rng.randf_range(-0.4, 0.2), rng.randf_range(-0.3, 0.3), rng.randf_range(-0.25, 0.25))
+	_place_destructible_panel(
+		parent, template.center_position, local_pos, size, mat, rot, PieceKind.FRACTURE_STUB
+	)
+
+
 static func _place_piece(
 	parent: Node3D,
 	template: ArenaTemplate,
@@ -203,7 +269,9 @@ static func _place_piece(
 	var center_y: float
 	match kind:
 		PieceKind.HANGING_PANEL:
-			center_y = rng_free_y_hanging(size.y)
+			center_y = rng_free_y_hanging(size.y) + 2.5
+		PieceKind.FRACTURE_STUB:
+			center_y = size.y * 0.45
 		_:
 			center_y = size.y * 0.5
 	local_pos.y = center_y

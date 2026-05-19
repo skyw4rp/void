@@ -74,6 +74,7 @@ static func build(parent: Node3D, template: ArenaTemplate) -> void:
 	ArenaBrutalistModules.build(parent, template)
 	ArenaPerimeterBuilder.build(parent, template)
 	ArenaFallZoneBuilder.build(parent, template)
+	ArenaChamberPass.build(parent, template)
 
 
 static func add_structural_floor(

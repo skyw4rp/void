@@ -109,7 +109,7 @@ Each countdown:
 2. **Pick** a template from `ArenaTemplates` (won’t repeat the same name back-to-back).
 3. **Maze** — `ArenaMazeGenerator` places **indestructible** `StructuralWall_*` architecture (lanes, citadel, flank galleries, gate cross); validates spawn reachability, **≥2 routes**, minimum corridor width.
 4. **Wall set** — `ArenaWallSetGenerator` adds **destructible** tactical cover around the maze (zones, archetypes; ~82% density when maze present); route must still include a detour.
-5. **Build** one **continuous deck** + structural maze + signature modules + destructible cover + **outer perimeter** (~70–80% protected) + **perimeter fall markers** (cracked edge, void glow).
+5. **Build** one **continuous deck** + structural maze + signature modules + destructible cover + **outer perimeter** (**~80–86%** shell, **6–12 u** brutalist walls) + **perimeter fall markers** + **Arena Chamber Pass** (void abyss, deck zones, landmark, **Megastructure Pass**, atmosphere, chamber lighting).
 6. **Validate spawns** — floor raycast; per-body spawn height (player feet at floor, enemy capsule center +0.8); low-profile spawn pads.
 7. If invalid → regenerate (up to 6 attempts, then Toxic Bridge fallback).
 7. Spawn **5–9** destructible cover pieces on **raycast-validated** floor points.
@@ -144,10 +144,46 @@ Each template: `spawn_safe_half`, perimeter `fall_zones[]`, `perimeter.ringout_o
 
 `StructuralWall` — collision, no HP, not in `destructible_wall`; blocks projectiles and movement; counts for AI LOS (`arena_wall`). Maze validation: BFS spawn-to-spawn, detour route, **≥2 cell** corridor width on primary path interior.
 
+### Arena Chamber Pass (`scripts/arena/arena_chamber_pass.gd`)
+
+Invoked from `arena_structure_builder.gd` after perimeter + fall zones. **Visual / atmosphere only** — no collision, no route or spawn changes.
+
+| Layer | Role |
+|-------|------|
+| **Central platform** | Slightly lighter deck overlay inside `safe_half_*` — main combat lanes |
+| **Outer ring** | Emissive danger strips at `danger_half_*` — ring-out read |
+| **Void abyss** | Dense gas cloud + deep void plane below deck; rise particles; under-glow omni |
+| **Verticality decor** | 2–4 visual-only ramps, micro-platforms, elevated chunks (no gameplay collision) |
+| **Landmark** | One randomized iconic structure per round: broken bridge, massive pillar, fractured arch, suspended ring, collapsed tower |
+| **Megastructure Pass** | See below — layered distant ruins (replaces legacy skyline boxes) |
+| **Atmosphere** | Dust, ash, metal spark particles (no gameplay) |
+| **Lighting** | Cold key directional + dim fill + rim omnis + void under-glow (weapon impacts still via combat hooks) |
+
+Console: `Arena Chamber Pass: landmark=…` · `Megastructure Pass: N distant clusters (3 depth layers)`
+
+### Megastructure Pass (`scripts/arena/arena_megastructure_pass.gd`)
+
+Called from `arena_chamber_pass.gd` after the in-arena landmark. **Visual only** — no collision, no AI.
+
+| Feature | Detail |
+|---------|--------|
+| **Count** | **3–8** distant clusters per round, outside playable bounds |
+| **Types** | Suspended bridge, brutalist tower, broken ring, vertical shaft, industrial pillar, fractured wall, collapsed deck, impossible arch |
+| **Scale** | **30–120 u** tall (layer-dependent); very low poly box silhouettes |
+| **Depth layers** | **Layer 1** near silhouettes (α ~0.82) · **Layer 2** mid structures (α ~0.56) · **Layer 3** giant distant (α ~0.34) — fog/read increases with distance |
+| **Chains** | ~55% clusters get a linked ruin (bridge→tower, pillar→deck, arch→segment, etc.) — implies lost civilization |
+| **Lights** | **1–3** sparse emissives per round (red / cyan / white): blinking beacons, damaged leaks (`arena_megastructure_beacon.gd`) |
+| **Void events** | Rare ambient (`arena_megastructure_void_events.gd`): distant flash, void lightning, falling debris, metallic resonance — **9–22 s** cadence, no gameplay |
+| **Silhouette rule** | Irregular scale, breaks, and chains — shapes should read as “what is that?” through fog |
+
+Groups: `arena_megastructure`, `arena_megastructure_light`.
+
 ### Outer perimeter (`scripts/arena/arena_perimeter_builder.gd`)
 
-- Procedural **partial shell** around danger bounds + margin
-- Piece types: full ruined wall, half wall, collapsed, cracked pillar, hanging panel
+- Procedural **partial shell** around danger bounds + margin (**~80–86%** coverage per template)
+- Piece types: full ruined wall, half wall, collapsed, cracked pillar, hanging panel, **breach gap** (paired stubs), **fracture shards**
+- Wall height **~6–12 u** on full segments and pillars; partial collapses and hanging panels lower
+- Random **fracture shards** and **breach gaps** (holes with flanking stubs) for broken-industrial read
 - **Decor-only** corner towers and distant breakwall silhouettes (no collision)
 - All walls/barriers/pillars/slabs/perimeter pieces use **`DestructibleWall`** (`destructible_wall` group) — named `DestructibleWall_Full`, `_Half`, `_Outer`, `_Pillar`, `_ThinSlab`. Anonymous `@StaticBody3D@*` names are **not allowed** for wall-like geometry.
 - **`StructuralFloor_*`** / **`StructuralConnector_*`** — non-destructible floors (`structural_geometry`).
@@ -177,7 +213,7 @@ Each template: `spawn_safe_half`, perimeter `fall_zones[]`, `perimeter.ringout_o
 | Bazooka direct | **120** |
 | Bazooka explosion | up to **90** (radius falloff) |
 
-**Staged destruction** (`wall_destruction.gd`): shotgun/bazooka break walls; **railgun does not** deal wall HP damage. **Railgun pierce marks** (`railgun_pierce_mark.gd`): **entry-only** cyan/purple burn rings on pierced surfaces (**8–12 s** fade, parented to host); exit marks removed (unreliable thickness). No mesh cut. **Beam** shows penetration; brief **impact flash** at each pierce. Real geometry holes postponed. (1) wall damage → crack visual, (2) hold **0.08–0.15 s**, (3) **8–40** chunks, (4) fade host. Floors stay `StructuralFloor_*` only.
+**Staged destruction** (`wall_destruction.gd`): shotgun/bazooka break walls; **railgun does not** deal wall HP damage. **Railgun pierce marks** (`railgun_pierce_mark.gd`): **entry-only** cyan/purple burn rings on pierced surfaces (**8–12 s** fade, parented to host); exit marks removed (unreliable thickness). No mesh cut. **Beam** shows penetration; brief **impact flash** at each pierce. Real geometry holes postponed. (1) wall damage → crack visual, (2) hold **0.05–0.10 s** (fast, heavy collapse), (3) **8–40** chunks (large → medium → small), (4) fade host. Floors stay `StructuralFloor_*` only.
 
 **Route validation** (`arena_route_validator.gd`): floor-grid **BFS** on the continuous deck; requires primary path **and** at least one detour. `arena_connector_builder.gd` bridge fallback is **rare** (legacy safety for disconnected layouts). Optional `debug_show_route` on `ArenaGenerator`.
 
@@ -185,7 +221,7 @@ Each template: `spawn_safe_half`, perimeter `fall_zones[]`, `perimeter.ringout_o
 
 ### Debug markers
 
-**Procedural wall sets** (`arena_wall_set_generator.gd`): each round mutates inner `wall_pieces` on top of the selected template — zone-based placement (center, lanes, flanks, spawn approaches), nine destructible archetypes, randomized cover density (**0.4–1.0**), and layout profiles (open center, center blocker, side-heavy, diagonal, long sight, close quarters). Route validator requires a primary path **plus** at least one detour. Signature template walls may be kept (~35%) so arenas stay recognizable.
+**Procedural wall sets** (`arena_wall_set_generator.gd`): each round mutates inner `wall_pieces` on top of the selected template — zone-based placement (center, lanes, flanks, spawn approaches), chamber cover types (**low cover, mid wall, broken pillar, arch, slab, half-collapsed** plus legacy archetypes), randomized cover density (**0.4–1.0**), and layout profiles (open center, center blocker, side-heavy, diagonal, long sight, close quarters). Route validator requires a primary path **plus** at least one detour. Signature template walls may be kept (~35%) so arenas stay recognizable.
 
 **Spawn pads** (`spawn_pad.tscn`): low-profile Quake-style spawn markers (small octagonal disk, thin glow ring, dark metal) flush with the floor. Player/enemy transforms raycast to floor height with per-body offsets (player feet at origin, enemy capsule center +0.8) — no stacked pad/stand clearance. Regenerated each round.
 

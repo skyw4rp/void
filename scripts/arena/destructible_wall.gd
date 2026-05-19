@@ -228,6 +228,10 @@ static func kind_from_perimeter_piece(piece_kind: int) -> WallKind:
 			return WallKind.PILLAR
 		4:
 			return WallKind.THIN_SLAB
+		5:
+			return WallKind.THIN_SLAB
+		6:
+			return WallKind.HALF
 		_:
 			return WallKind.OUTER_HEAVY
 
