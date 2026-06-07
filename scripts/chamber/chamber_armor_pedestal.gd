@@ -5,6 +5,9 @@ extends ChamberInteractable
 @onready var _mannequin: MeshInstance3D = (
 	get_parent().get_node_or_null("Mannequin") as MeshInstance3D
 )
+@onready var _highlight: MeshInstance3D = (
+	get_parent().get_node_or_null("Highlight") as MeshInstance3D
+)
 
 
 func _ready() -> void:
@@ -49,3 +52,5 @@ func _refresh_visual() -> void:
 	mat.emission_enabled = active
 	mat.emission = Color(0.15, 0.35, 0.42) if active else Color(0, 0, 0)
 	mat.emission_energy_multiplier = 0.35 if active else 0.0
+	if _highlight:
+		_highlight.visible = active

@@ -6,7 +6,7 @@
 
 **Related:** [VOID_GLADIATOR_LOOP.md](VOID_GLADIATOR_LOOP.md) (progression + resources) · [VOID_DESIGN_PHILOSOPHY.md](VOID_DESIGN_PHILOSOPHY.md) · [art/ART_DIRECTION.md](art/ART_DIRECTION.md)
 
-**Status:** Design spec — **not implemented** (prototype loads arena directly).
+**Status:** Design spec. **MVP implemented** — see [GLADIATOR_CHAMBER.md](GLADIATOR_CHAMBER.md) for scene paths, polish pass, and test steps.
 
 ---
 
@@ -44,17 +44,17 @@ Spawn ──► Prepare ──► Queue ──► [Arena PvP] ──► Return �
 ### Placement (suggested plan)
 
 ```
-                    [ OBSERVATORY ]
-                    void glass / rail
-                          │
-    [ INVENTORY ] ── central slab ── [ ARMORY ]
-         alcove          spawn          racks
-                          │
-                  [ ARENA TERMINAL ]
-                    sunken dais
-                          │
-                    ▼ void drop ▼
-              (not walkable — visual only)
+					[ OBSERVATORY ]
+					void glass / rail
+						  │
+	[ INVENTORY ] ── central slab ── [ ARMORY ]
+		 alcove          spawn          racks
+						  │
+				  [ ARENA TERMINAL ]
+					sunken dais
+						  │
+					▼ void drop ▼
+			  (not walkable — visual only)
 ```
 
 - **Spawn:** Center — player faces Terminal or void slit on return.

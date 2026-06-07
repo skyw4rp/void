@@ -718,7 +718,7 @@ All toggles are **editor exports** on nodes in `main.tscn` unless noted. Run gam
 | | |
 |--|--|
 | **Scene** | `scenes/chamber/gladiator_chamber.tscn` |
-| **Builder** | `scripts/chamber/gladiator_chamber.gd` — ~32×26 m brutalist shell + interactables |
+| **Builder** | `scripts/chamber/gladiator_chamber.gd` — enclosed 32×26 m shell, void window, weapon/armor bays ([GLADIATOR_CHAMBER.md](GLADIATOR_CHAMBER.md)) |
 | **Player** | `scripts/chamber/chamber_player.gd` — walk + E interact |
 | **Arena handoff** | `scripts/chamber/arena_match_bridge.gd` on `arena_match.tscn` |
 | **Return mood** | Victory/defeat fog + lights in `gladiator_chamber.gd` |

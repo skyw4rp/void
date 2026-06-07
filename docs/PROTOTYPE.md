@@ -25,6 +25,33 @@ Gladiator Chamber → prepare loadout (E on racks/pedestals) → Arena Terminal 
 
 **Return mood:** victory = clearer fog / brighter key (~55 s); defeat = heavier fog / dim key (~28 s). See [VOID_RETURN_LOOP.md](VOID_RETURN_LOOP.md).
 
+**Hub doc:** [GLADIATOR_CHAMBER.md](GLADIATOR_CHAMBER.md)
+
+### Gladiator Chamber Art Pass
+
+Visual-only refinement in `gladiator_chamber.gd` — same interact positions and `GameFlow`. Goal: closed brutalist sanctuary; readable zones from spawn.
+
+| Focal (from spawn) | Direction | Read |
+|--------------------|-----------|------|
+| Arrival slab | Center | Worn stone + cyan ring |
+| Weapon bay | West | Pedestals, cyan strips, overhead cold spot |
+| Armor shrine | East | Backdrop wall, warm strips, helmet alcove glow |
+| Strategy table | Ahead (~z 5.6) | Map surface + hologram (visual; Terminal still queues match at south) |
+| Void window | North | Thick frame, glass, energy barrier, floor uplight |
+
+| Pass | Detail |
+|------|--------|
+| **Materials** | Dark concrete, worn stone, oxidized / black steel, cyan + red emissive accents |
+| **Lighting** | Cold overhead spots per zone, rim fill, void floor uplight, no flat global fill |
+| **Architecture** | Floor trims, recessed panels, wall ribs, slanted slab landmark, ceiling ribs |
+| **Atmosphere** | Dust + ash + floor vent particles; low `fog_density` only |
+
+**Functional layout pass:** loadout bay west (weapons + armor + helmets together); command/match south; progression wall east; void observation north; rest SE placeholder. See [GLADIATOR_CHAMBER.md](GLADIATOR_CHAMBER.md).
+
+**Sanctuary art (retained):** vertical weapon altars, zone lighting, ceiling/floor detail, atmosphere particles.
+
+**Unchanged:** arena generation, combat, loadout APIs, E-interact behavior (positions moved only).
+
 **Legacy:** `scenes/main.tscn` — same arena content; not the run entry point.
 
 ## Game rules

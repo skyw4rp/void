@@ -1,5 +1,7 @@
 # Neon Catacombs — Project Status Report
 
+> **Canonical status (Reverse SDD):** [PROJECT_STATUS.md](PROJECT_STATUS.md) · [specs/VOID_SPEC.md](specs/VOID_SPEC.md) · [tasks/VOID_TASKS.md](tasks/VOID_TASKS.md). This report is a longer historical snapshot and may drift.
+
 **Generated from implementation snapshot (Godot 4.6).**  
 This document reflects what exists in the repository today, not planned features unless noted as TODO.
 
@@ -16,11 +18,28 @@ This document reflects what exists in the repository today, not planned features
 | **Prototype status** | Playable vertical slice: gladiator chamber loop, five large procedural arenas, **Arena Chamber Pass** + **Megastructure Pass** (layered distant ruins), tall perimeter shell, fall-zone warnings, deep toxic gas, void/kill deaths, match to 5 points. |
 | **Elevator pitch** | A brutalist pit-fighter duel in a fog-choked void — fight on spacious suspended ruins, knock foes through intentional openings into gas that swallows visibility below. |
 | **Target experience** | Tension at the edge, readable knockback, satisfying kills and void falls, short explosive rounds, growing dread from the abyss. |
-| **Current loop** | Match → random arena build → countdown → fight → point (void or kill) → respawn → repeat until 5 points → win/lose screen. |
+| **Current loop** | Gladiator Chamber prep → Terminal → arena match to 5 → return chamber (win/loss mood). |
 
 ---
 
 ## 2. GAME LOOP
+
+### Gladiator Chamber hub
+
+**Doc:** [GLADIATOR_CHAMBER.md](GLADIATOR_CHAMBER.md) · design [VOID_GLADIATOR_CHAMBER.md](VOID_GLADIATOR_CHAMBER.md)
+
+| Piece | Path |
+|-------|------|
+| Main scene | `scenes/chamber/gladiator_chamber.tscn` |
+| Builder | `scripts/chamber/gladiator_chamber.gd` |
+| Flow | Autoload `GameFlow` + `GladiatorLoadout` |
+| Arena duel | `scenes/arena/arena_match.tscn` via Terminal [E] |
+
+**Enclosed hub:** floor, walls, ceiling, void window frame, functional zone nodes under `ChamberRoot`.
+
+**Chamber cleanup pass — simplified to functional zones:** `Architecture`, `LoadoutBay` (pedestals only), `CommandArea` (map table + Terminal), `ProgressionWall` (placeholder), `VoidWindow` (framed opening), `Lighting`, `Atmosphere`. Post-build clutter cull removes mid-height meshes with span > 4 m. Decorative beams, rails, rest area, and extra art passes removed. **No** arena/combat/interaction logic changes.
+
+**Interact:** weapon racks (west), armor pedestals + helmet stands (east), Arena Terminal (south). Return mood adjusts fog, key light, void uplight (~55 s win / ~28 s loss).
 
 ### Match flow
 
@@ -613,6 +632,7 @@ neon-catacombs/
 | ArenaGenerator | Done | 5 playable templates + chamber pass |
 | Arena Chamber Pass | Done | Landmark, void abyss, atmosphere |
 | Megastructure Pass | Done | 3-layer distant ruins, beacons, void events |
+| Gladiator Chamber (hub) | Done | Functional zones, cleanup pass, loadout + chamber loop |
 | Spawn validation | Done | Raycast floor |
 | Destructible cover | Done | 4 types, HP |
 | Cover floor validation | Done | Raycast |
